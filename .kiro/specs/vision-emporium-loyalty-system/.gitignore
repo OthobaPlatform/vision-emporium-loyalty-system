@@ -1,0 +1,42 @@
+# .NET
+bin/
+obj/
+*.dll
+*.pdb
+*.exe
+*.user
+*.suo
+*.cache
+*.log
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build outputs
+dist/
+publish/
+out/
+
+# Secrets
+*.env
+*.env.local
+appsettings.*.json
+!appsettings.json
+!appsettings.*.example.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test results
+TestResults/
+coverage/
+*.coverage
+
+# Temporary files
+*.tmp
+*.bak

@@ -1,0 +1,21 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/VELoyalty.Api/VELoyalty.Api.csproj" />
+    <Project Path="src/VELoyalty.Auth/VELoyalty.Auth.csproj" />
+    <Project Path="src/VELoyalty.AuthLambda/VELoyalty.AuthLambda.csproj" />
+    <Project Path="src/VELoyalty.Authorizer/VELoyalty.Authorizer.csproj" />
+    <Project Path="src/VELoyalty.Core/VELoyalty.Core.csproj" />
+    <Project Path="src/VELoyalty.Data/VELoyalty.Data.csproj" />
+    <Project Path="src/VELoyalty.ExcelProcessor/VELoyalty.ExcelProcessor.csproj" />
+    <Project Path="src/VELoyalty.NotificationHandler/VELoyalty.NotificationHandler.csproj" />
+    <Project Path="src/VELoyalty.Notifications/VELoyalty.Notifications.csproj" />
+    <Project Path="src/VELoyalty.StreamProcessor/VELoyalty.StreamProcessor.csproj" />
+    <Project Path="src/VELoyalty.SyncJob/VELoyalty.SyncJob.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/VELoyalty.Api.Tests/VELoyalty.Api.Tests.csproj" />
+    <Project Path="tests/VELoyalty.Auth.Tests/VELoyalty.Auth.Tests.csproj" />
+    <Project Path="tests/VELoyalty.Core.Tests/VELoyalty.Core.Tests.csproj" />
+    <Project Path="tests/VELoyalty.Data.Tests/VELoyalty.Data.Tests.csproj" />
+  </Folder>
+</Solution>

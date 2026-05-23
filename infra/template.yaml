@@ -1,0 +1,590 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Vision Emporium Loyalty System MVP - Serverless Infrastructure
+  Deployed in ap-south-1 with .NET 8 Native AOT Lambdas, DynamoDB single-table design,
+  S3/CloudFront frontend hosting, and custom JWT authentication.
+
+Globals:
+  Function:
+    Timeout: 30
+    MemorySize: 512
+    Runtime: provided.al2023
+    Architectures:
+      - x86_64
+    Environment:
+      Variables:
+        TABLE_NAME: !Ref VELoyaltyTable
+        AWS_REGION_NAME: ap-south-1
+        JWT_SECRET_ARN: !Ref JwtSigningSecret
+
+Parameters:
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+    Description: Deployment environment
+
+  SyncIntervalMinutes:
+    Type: Number
+    Default: 60
+    MinValue: 15
+    Description: Interval in minutes for the sync job scheduler (minimum 15)
+
+  FrontendBucketName:
+    Type: String
+    Default: ve-loyalty-frontend
+    Description: S3 bucket name for frontend hosting
+
+  UploadsBucketName:
+    Type: String
+    Default: ve-loyalty-uploads
+    Description: S3 bucket name for file uploads
+
+Resources:
+  # =============================================================================
+  # DynamoDB Table - Single Table Design
+  # =============================================================================
+  VELoyaltyTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: VELoyalty
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: GSI1PK
+          AttributeType: S
+        - AttributeName: GSI1SK
+          AttributeType: S
+        - AttributeName: GSI2PK
+          AttributeType: S
+        - AttributeName: GSI2SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1
+          KeySchema:
+            - AttributeName: GSI1PK
+              KeyType: HASH
+            - AttributeName: GSI1SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: GSI2
+          KeySchema:
+            - AttributeName: GSI2PK
+              KeyType: HASH
+            - AttributeName: GSI2SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: Project
+          Value: VELoyalty
+        - Key: Environment
+          Value: !Ref Environment
+
+  # =============================================================================
+  # AWS Secrets Manager - JWT Signing Key
+  # =============================================================================
+  JwtSigningSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub ve-loyalty-jwt-secret-${Environment}
+      Description: HMAC-SHA256 shared secret for JWT signing
+      GenerateSecretString:
+        SecretStringTemplate: '{}'
+        GenerateStringKey: signingKey
+        PasswordLength: 64
+        ExcludeCharacters: '"@/\'
+      Tags:
+        - Key: Project
+          Value: VELoyalty
+        - Key: Environment
+          Value: !Ref Environment
+
+  # =============================================================================
+  # S3 Buckets
+  # =============================================================================
+  FrontendBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${FrontendBucketName}-${Environment}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      Tags:
+        - Key: Project
+          Value: VELoyalty
+        - Key: Environment
+          Value: !Ref Environment
+
+  FrontendBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref FrontendBucket
+      PolicyDocument:
+        Statement:
+          - Sid: AllowCloudFrontOAC
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub ${FrontendBucket.Arn}/*
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub arn:aws:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistribution}
+
+  UploadsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${UploadsBucketName}-${Environment}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: CleanupProcessedUploads
+            Status: Enabled
+            ExpirationInDays: 30
+            Prefix: uploads/
+      Tags:
+        - Key: Project
+          Value: VELoyalty
+        - Key: Environment
+          Value: !Ref Environment
+
+  # =============================================================================
+  # Lambda Functions
+  # =============================================================================
+
+  # API Handler Lambda
+  VELoyaltyApi:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub VELoyaltyApi-${Environment}
+      Handler: bootstrap
+      CodeUri: ../src/VELoyalty.Api/publish/
+      Description: Main API handler for the Vision Emporium Loyalty System
+      Environment:
+        Variables:
+          UPLOADS_BUCKET: !Ref UploadsBucket
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref VELoyaltyTable
+        - S3CrudPolicy:
+            BucketName: !Ref UploadsBucket
+        - AWSSecretsManagerGetSecretValuePolicy:
+            SecretArn: !Ref JwtSigningSecret
+      Events:
+        ApiCatchAll:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref VELoyaltyHttpApi
+            Path: /api/v1/{proxy+}
+            Method: ANY
+            Auth:
+              Authorizer: VELoyaltyLambdaAuthorizer
+      Tags:
+        Project: VELoyalty
+        Environment: !Ref Environment
+
+  # Auth Lambda - Public endpoint (no authorizer)
+  VELoyaltyAuthLambda:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub VELoyaltyAuthLambda-${Environment}
+      Handler: bootstrap
+      CodeUri: ../src/VELoyalty.AuthLambda/publish/
+      Description: Authentication Lambda - validates credentials and issues JWT tokens
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref VELoyaltyTable
+        - AWSSecretsManagerGetSecretValuePolicy:
+            SecretArn: !Ref JwtSigningSecret
+      Events:
+        AuthLogin:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref VELoyaltyHttpApi
+            Path: /api/v1/auth/login
+            Method: POST
+            Auth:
+              Authorizer: NONE
+      Tags:
+        Project: VELoyalty
+        Environment: !Ref Environment
+
+  # Custom Lambda Authorizer
+  VELoyaltyAuthorizer:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub VELoyaltyAuthorizer-${Environment}
+      Handler: bootstrap
+      CodeUri: ../src/VELoyalty.Authorizer/publish/
+      Description: Custom Lambda Authorizer - validates JWT signature and expiry
+      Policies:
+        - AWSSecretsManagerGetSecretValuePolicy:
+            SecretArn: !Ref JwtSigningSecret
+      Tags:
+        Project: VELoyalty
+        Environment: !Ref Environment
+
+  # Sync Job Lambda
+  VELoyaltySyncJob:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub VELoyaltySyncJob-${Environment}
+      Handler: bootstrap
+      CodeUri: ../src/VELoyalty.SyncJob/publish/
+      Description: Scheduled sync job - fetches sales data from external API
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref VELoyaltyTable
+      Events:
+        ScheduledSync:
+          Type: ScheduleV2
+          Properties:
+            ScheduleExpression: !Sub rate(${SyncIntervalMinutes} minutes)
+            Description: Periodic sync of sales data from external API
+            State: ENABLED
+      Tags:
+        Project: VELoyalty
+        Environment: !Ref Environment
+
+  # Excel Processor Lambda
+  VELoyaltyExcelProcessor:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub VELoyaltyExcelProcessor-${Environment}
+      Handler: bootstrap
+      CodeUri: ../src/VELoyalty.ExcelProcessor/publish/
+      Description: Processes uploaded Excel files for bulk data import
+      Environment:
+        Variables:
+          UPLOADS_BUCKET: !Sub ${UploadsBucketName}-${Environment}
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref VELoyaltyTable
+        - S3ReadPolicy:
+            BucketName: !Sub ${UploadsBucketName}-${Environment}
+      Events:
+        ExcelUpload:
+          Type: S3
+          Properties:
+            Bucket: !Ref UploadsBucket
+            Events: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: prefix
+                    Value: uploads/
+                  - Name: suffix
+                    Value: .xlsx
+      Tags:
+        Project: VELoyalty
+        Environment: !Ref Environment
+
+  # Stream Processor Lambda
+  VELoyaltyStreamProcessor:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub VELoyaltyStreamProcessor-${Environment}
+      Handler: bootstrap
+      CodeUri: ../src/VELoyalty.StreamProcessor/publish/
+      Description: Processes DynamoDB stream events for eligibility evaluation
+      Environment:
+        Variables:
+          NOTIFICATION_FUNCTION_NAME: !Ref VELoyaltyNotificationHandler
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref VELoyaltyTable
+        - LambdaInvokePolicy:
+            FunctionName: !Ref VELoyaltyNotificationHandler
+      Events:
+        DynamoDBStream:
+          Type: DynamoDB
+          Properties:
+            Stream: !GetAtt VELoyaltyTable.StreamArn
+            StartingPosition: TRIM_HORIZON
+            BatchSize: 10
+            MaximumRetryAttempts: 3
+            FilterCriteria:
+              Filters:
+                - Pattern: '{"eventName": ["INSERT"]}'
+      Tags:
+        Project: VELoyalty
+        Environment: !Ref Environment
+
+  # Notification Handler Lambda
+  VELoyaltyNotificationHandler:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub VELoyaltyNotificationHandler-${Environment}
+      Handler: bootstrap
+      CodeUri: ../src/VELoyalty.NotificationHandler/publish/
+      Description: Sends SMS notifications via third-party gateway
+      Policies:
+        - DynamoDBCrudPolicy:
+            TableName: !Ref VELoyaltyTable
+      Tags:
+        Project: VELoyalty
+        Environment: !Ref Environment
+
+  # =============================================================================
+  # API Gateway HTTP API
+  # =============================================================================
+  VELoyaltyHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: !Ref Environment
+      Description: Vision Emporium Loyalty System HTTP API
+      CorsConfiguration:
+        AllowOrigins:
+          - '*'
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - PATCH
+          - DELETE
+          - OPTIONS
+        AllowHeaders:
+          - Content-Type
+          - Authorization
+          - X-Requested-With
+        MaxAge: 3600
+      Auth:
+        DefaultAuthorizer: VELoyaltyLambdaAuthorizer
+        Authorizers:
+          VELoyaltyLambdaAuthorizer:
+            FunctionArn: !GetAtt VELoyaltyAuthorizer.Arn
+            FunctionInvokeRole: !GetAtt AuthorizerInvokeRole.Arn
+            Identity:
+              Headers:
+                - Authorization
+              ReauthorizeEvery: 300
+            AuthorizerPayloadFormatVersion: "2.0"
+            EnableSimpleResponses: true
+
+  AuthorizerInvokeRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub VELoyaltyAuthorizerInvokeRole-${Environment}
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: apigateway.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: InvokeAuthorizerLambda
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !GetAtt VELoyaltyAuthorizer.Arn
+
+  # =============================================================================
+  # CloudFront Distribution
+  # =============================================================================
+  CloudFrontOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub VELoyalty-OAC-${Environment}
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub Vision Emporium Loyalty System - ${Environment}
+        DefaultRootObject: index.html
+        PriceClass: PriceClass_200
+        HttpVersion: http2and3
+        Origins:
+          # S3 Frontend Origin
+          - Id: S3FrontendOrigin
+            DomainName: !GetAtt FrontendBucket.RegionalDomainName
+            OriginAccessControlId: !Ref CloudFrontOriginAccessControl
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+          # API Gateway Origin
+          - Id: ApiGatewayOrigin
+            DomainName: !Sub ${VELoyaltyHttpApi}.execute-api.ap-south-1.amazonaws.com
+            CustomOriginConfig:
+              HTTPSPort: 443
+              OriginProtocolPolicy: https-only
+              OriginSSLProtocols:
+                - TLSv1.2
+        DefaultCacheBehavior:
+          TargetOriginId: S3FrontendOrigin
+          ViewerProtocolPolicy: redirect-to-https
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6  # CachingOptimized
+          Compress: true
+        CacheBehaviors:
+          # API routes go to API Gateway
+          - PathPattern: /api/*
+            TargetOriginId: ApiGatewayOrigin
+            ViewerProtocolPolicy: https-only
+            CachePolicyId: 4135ea2d-6df8-44a3-9df3-4b5a84be39ad  # CachingDisabled
+            OriginRequestPolicyId: b689b0a8-53d0-40ab-baf2-68738e2966ac  # AllViewerExceptHostHeader
+            AllowedMethods:
+              - GET
+              - HEAD
+              - OPTIONS
+              - PUT
+              - POST
+              - PATCH
+              - DELETE
+        # SPA fallback - serve index.html for client-side routing
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+            ErrorCachingMinTTL: 10
+          - ErrorCode: 404
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+            ErrorCachingMinTTL: 10
+      Tags:
+        - Key: Project
+          Value: VELoyalty
+        - Key: Environment
+          Value: !Ref Environment
+
+  # =============================================================================
+  # EventBridge Scheduler (for reminder notifications)
+  # =============================================================================
+  NotificationReminderSchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: !Sub VELoyalty-ExpiryReminder-${Environment}
+      Description: Daily check for verification codes nearing expiry (7-day reminder)
+      ScheduleExpression: cron(0 9 * * ? *)
+      FlexibleTimeWindow:
+        Mode: FLEXIBLE
+        MaximumWindowInMinutes: 30
+      State: ENABLED
+      Target:
+        Arn: !GetAtt VELoyaltyNotificationHandler.Arn
+        RoleArn: !GetAtt SchedulerExecutionRole.Arn
+        Input: '{"type": "EXPIRY_REMINDER"}'
+
+  SchedulerExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub VELoyaltySchedulerRole-${Environment}
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: scheduler.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: InvokeLambda
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource:
+                  - !GetAtt VELoyaltyNotificationHandler.Arn
+                  - !GetAtt VELoyaltySyncJob.Arn
+
+# =============================================================================
+# Outputs
+# =============================================================================
+Outputs:
+  VELoyaltyTableName:
+    Description: DynamoDB table name
+    Value: !Ref VELoyaltyTable
+
+  VELoyaltyTableArn:
+    Description: DynamoDB table ARN
+    Value: !GetAtt VELoyaltyTable.Arn
+
+  VELoyaltyTableStreamArn:
+    Description: DynamoDB table stream ARN
+    Value: !GetAtt VELoyaltyTable.StreamArn
+
+  HttpApiUrl:
+    Description: API Gateway HTTP API URL
+    Value: !Sub https://${VELoyaltyHttpApi}.execute-api.ap-south-1.amazonaws.com/${Environment}
+
+  CloudFrontDomainName:
+    Description: CloudFront distribution domain name
+    Value: !GetAtt CloudFrontDistribution.DomainName
+
+  CloudFrontDistributionId:
+    Description: CloudFront distribution ID
+    Value: !Ref CloudFrontDistribution
+
+  FrontendBucketName:
+    Description: S3 bucket for frontend hosting
+    Value: !Ref FrontendBucket
+
+  UploadsBucketName:
+    Description: S3 bucket for file uploads
+    Value: !Ref UploadsBucket
+
+  JwtSecretArn:
+    Description: ARN of the JWT signing secret in Secrets Manager
+    Value: !Ref JwtSigningSecret
+
+  AuthLambdaFunctionArn:
+    Description: Auth Lambda function ARN
+    Value: !GetAtt VELoyaltyAuthLambda.Arn
+
+  ApiHandlerFunctionArn:
+    Description: API Handler Lambda function ARN
+    Value: !GetAtt VELoyaltyApi.Arn
+
+  SyncJobFunctionArn:
+    Description: Sync Job Lambda function ARN
+    Value: !GetAtt VELoyaltySyncJob.Arn
+
+  ExcelProcessorFunctionArn:
+    Description: Excel Processor Lambda function ARN
+    Value: !GetAtt VELoyaltyExcelProcessor.Arn
+
+  StreamProcessorFunctionArn:
+    Description: Stream Processor Lambda function ARN
+    Value: !GetAtt VELoyaltyStreamProcessor.Arn
+
+  NotificationHandlerFunctionArn:
+    Description: Notification Handler Lambda function ARN
+    Value: !GetAtt VELoyaltyNotificationHandler.Arn

@@ -1,7 +1,9 @@
+using System.Globalization;
 using Asp.Versioning;
 using VELoyalty.Api.Services;
 using VELoyalty.Auth;
 using VELoyalty.Core;
+using VELoyalty.Core.Validation;
 using VELoyalty.Data.Repositories;
 
 namespace VELoyalty.Api.Endpoints;
@@ -14,6 +16,8 @@ public static class IngestionEndpoints
         group.MapPost("/ingestion/upload", async (
             HttpContext httpContext,
             ImportJobRepository importJobRepository,
+            PurchaseRepository purchaseRepository,
+            CustomerRepository customerRepository,
             AuditRepository auditRepository,
             CancellationToken cancellationToken) =>
         {
@@ -34,20 +38,115 @@ public static class IngestionEndpoints
             var now = DateTime.UtcNow;
             var actorId = httpContext.GetUserId() ?? "admin";
 
-            var importJob = new ImportJobResult(
+            // Parse CSV and process rows
+            var totalRows = 0;
+            var recordsImported = 0;
+            var recordsSkipped = 0;
+            var recordsRejected = 0;
+            var rejectedRows = new List<RejectedRow>();
+
+            using var reader = new StreamReader(file.OpenReadStream());
+            var headerLine = await reader.ReadLineAsync(cancellationToken);
+
+            if (string.IsNullOrWhiteSpace(headerLine))
+            {
+                return Results.BadRequest(new { error = "ValidationError", message = "File is empty or has no header row." });
+            }
+
+            var headers = ParseCsvLine(headerLine);
+            var columnValidation = ExcelSchemaValidator.ValidateColumns(headers);
+            if (!columnValidation.IsValid)
+            {
+                return Results.BadRequest(new { error = "ValidationError", message = string.Join("; ", columnValidation.Errors) });
+            }
+
+            var seenChallans = new HashSet<string>();
+
+            while (!reader.EndOfStream)
+            {
+                var line = await reader.ReadLineAsync(cancellationToken);
+                if (string.IsNullOrWhiteSpace(line)) continue;
+
+                totalRows++;
+                var values = ParseCsvLine(line);
+                var row = MapToRow(headers, values);
+
+                // Validate row
+                var rowValidation = ExcelSchemaValidator.ValidateRow(row, totalRows);
+                if (!rowValidation.IsValid)
+                {
+                    recordsRejected++;
+                    rejectedRows.Add(new RejectedRow(totalRows, string.Join("; ", rowValidation.Errors)));
+                    continue;
+                }
+
+                // Extract fields
+                var distId = GetVal(row, "DIST_ID") ?? "";
+                var itemId = GetVal(row, "ITEM_ID") ?? "";
+                var itemName = GetVal(row, "ITEM_NAME") ?? "";
+                var challanNo = GetVal(row, "CHALLAN_NO") ?? "";
+                var note = GetVal(row, "NOTE") ?? "";
+                var netAmntStr = GetVal(row, "NET_AMNT") ?? "0";
+                var dateStr = GetVal(row, "CHALLAN_DATE") ?? "";
+                var qtyStr = GetVal(row, "OC_QTY") ?? "1";
+
+                // Parse values
+                decimal.TryParse(netAmntStr, NumberStyles.Number, CultureInfo.InvariantCulture, out var netAmnt);
+                var amountBdt = ExcelSchemaValidator.ConvertFromThousands(netAmnt);
+                ExcelSchemaValidator.TryParseChallanDate(dateStr, out var purchaseDate);
+                int.TryParse(qtyStr, out var qty);
+                if (qty < 1) qty = 1;
+
+                // Extract customer identity from NOTE
+                var phone = ExcelSchemaValidator.ExtractPhoneNumber(note);
+                var customerName = ExcelSchemaValidator.ExtractCustomerName(note);
+                var staffId = ExcelSchemaValidator.ExtractStaffId(note);
+                var customerId = phone ?? (staffId != null ? $"STAFF-{staffId}" : $"UNKNOWN-{challanNo}");
+
+                // Dedup by challan+item
+                var dedupKey = $"{challanNo}#{itemId}";
+                if (seenChallans.Contains(dedupKey))
+                {
+                    recordsSkipped++;
+                    continue;
+                }
+                seenChallans.Add(dedupKey);
+
+                // Store purchase record
+                var purchase = new Purchase(
+                    CustomerId: customerId,
+                    OutletId: distId,
+                    PurchaseDate: purchaseDate,
+                    Amount: amountBdt,
+                    ProductCategory: itemName,
+                    ProcessedAt: now,
+                    ChallanNo: challanNo,
+                    ItemId: itemId,
+                    Quantity: qty
+                );
+
+                var stored = await purchaseRepository.StorePurchaseAsync(purchase, cancellationToken);
+                if (stored)
+                    recordsImported++;
+                else
+                    recordsSkipped++; // Already exists in DB
+            }
+
+            // Save job result
+            var completedJob = new ImportJobResult(
                 JobId: jobId,
-                Status: "Processing",
+                Status: "Completed",
                 FileName: file.FileName,
-                TotalRows: 0,
-                RecordsImported: 0,
-                RecordsRejected: 0,
-                RecordsSkipped: 0,
-                RejectedRows: new List<RejectedRow>(),
+                TotalRows: totalRows,
+                RecordsImported: recordsImported,
+                RecordsRejected: recordsRejected,
+                RecordsSkipped: recordsSkipped,
+                RejectedRows: rejectedRows,
                 StartedAt: now,
-                CompletedAt: now
+                CompletedAt: DateTime.UtcNow
             );
 
-            await importJobRepository.CreateAsync(importJob, cancellationToken);
+            await importJobRepository.CreateAsync(completedJob, cancellationToken);
 
             await auditRepository.AppendAsync(new AuditEntry(
                 EventType: "IngestionJob",
@@ -57,17 +156,15 @@ public static class IngestionEndpoints
                 Details: new Dictionary<string, string>
                 {
                     ["fileName"] = file.FileName,
-                    ["fileSize"] = file.Length.ToString(),
-                    ["action"] = "Upload"
+                    ["totalRows"] = totalRows.ToString(),
+                    ["imported"] = recordsImported.ToString(),
+                    ["skipped"] = recordsSkipped.ToString(),
+                    ["rejected"] = recordsRejected.ToString()
                 },
-                Timestamp: now
+                Timestamp: DateTime.UtcNow
             ), cancellationToken);
 
-            // For local dev, mark as completed immediately
-            var completedJob = importJob with { Status = "Completed", CompletedAt = DateTime.UtcNow };
-            await importJobRepository.UpdateAsync(completedJob, cancellationToken);
-
-            return Results.Ok(new { jobId, status = "Completed", message = "File uploaded and processed." });
+            return Results.Ok(new { jobId, status = "Completed", message = $"Processed {totalRows} rows: {recordsImported} imported, {recordsSkipped} skipped, {recordsRejected} rejected." });
         }).RequireAdmin().DisableAntiforgery().MapToApiVersion(1, 0);
 
         // GET /ingestion/jobs/{id}
@@ -161,5 +258,65 @@ public static class IngestionEndpoints
         }).RequireAdmin().MapToApiVersion(1, 0);
 
         return group;
+    }
+
+    /// <summary>
+    /// Parses a CSV line handling quoted fields with commas inside.
+    /// </summary>
+    private static List<string> ParseCsvLine(string line)
+    {
+        var fields = new List<string>();
+        var current = "";
+        var inQuotes = false;
+
+        for (int i = 0; i < line.Length; i++)
+        {
+            var c = line[i];
+            if (c == '"')
+            {
+                if (inQuotes && i + 1 < line.Length && line[i + 1] == '"')
+                {
+                    current += '"';
+                    i++; // skip escaped quote
+                }
+                else
+                {
+                    inQuotes = !inQuotes;
+                }
+            }
+            else if (c == ',' && !inQuotes)
+            {
+                fields.Add(current.Trim());
+                current = "";
+            }
+            else
+            {
+                current += c;
+            }
+        }
+        fields.Add(current.Trim());
+        return fields;
+    }
+
+    /// <summary>
+    /// Maps header names to row values as a dictionary.
+    /// </summary>
+    private static Dictionary<string, string?> MapToRow(List<string> headers, List<string> values)
+    {
+        var row = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        for (int i = 0; i < headers.Count; i++)
+        {
+            var value = i < values.Count ? values[i] : null;
+            row[headers[i]] = string.IsNullOrWhiteSpace(value) ? null : value;
+        }
+        return row;
+    }
+
+    /// <summary>
+    /// Gets a value from the row dictionary (case-insensitive).
+    /// </summary>
+    private static string? GetVal(Dictionary<string, string?> row, string key)
+    {
+        return row.TryGetValue(key, out var val) ? val : null;
     }
 }

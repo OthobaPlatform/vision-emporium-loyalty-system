@@ -233,7 +233,7 @@ export function CustomersPage() {
             <h2 className="text-lg font-semibold text-gray-900 mb-4">
               Verification Codes (Current Cycle)
             </h2>
-            {customer.codes.length === 0 ? (
+            {(customer.codes?.length ?? 0) === 0 ? (
               <p className="text-sm text-gray-500">
                 No verification codes issued for this customer in the current cycle.
               </p>
@@ -266,7 +266,7 @@ export function CustomersPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {customer.codes.map((code) => (
+                    {(customer.codes ?? []).map((code) => (
                       <tr key={code.code} className="hover:bg-gray-50">
                         <td className="px-4 py-3 font-mono text-gray-900">
                           {code.code}

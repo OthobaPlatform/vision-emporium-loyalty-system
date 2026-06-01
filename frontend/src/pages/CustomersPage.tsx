@@ -105,16 +105,24 @@ export function CustomersPage() {
     setSelectedCustomer(customer);
     setCustomerProfile(null);
     setCustomerCodes(null);
+
+    // Use phoneNumber or customerId for the lookup
+    const lookupId = customer.phoneNumber || customer.customerId;
+    if (!lookupId) {
+      setIsLoadingDetail(false);
+      return;
+    }
+
     setIsLoadingDetail(true);
 
     try {
-      const encodedPhone = encodeURIComponent(customer.phoneNumber);
+      const encodedId = encodeURIComponent(lookupId);
       const [profile, codes] = await Promise.all([
-        apiClient.get<CustomerProfileResponse>(`/customers/${encodedPhone}`),
-        apiClient.get<CustomerCodesResponse>(`/customers/${encodedPhone}/codes`),
+        apiClient.get<CustomerProfileResponse>(`/customers/${encodedId}`).catch(() => null),
+        apiClient.get<CustomerCodesResponse>(`/customers/${encodedId}/codes`).catch(() => null),
       ]);
-      setCustomerProfile(profile);
-      setCustomerCodes(codes);
+      if (profile) setCustomerProfile(profile);
+      if (codes) setCustomerCodes(codes);
     } catch (err) {
       if (err instanceof ApiError) {
         showToast('error', 'Failed to load customer details.');

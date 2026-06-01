@@ -29,10 +29,10 @@ public static class ExcelSchemaValidator
 
     /// <summary>
     /// Regex to extract customer name from NOTE field.
-    /// Matches: "Name: {name} Mb No:" or "Credit Staff Id: {id} Name: {name}"
+    /// Matches: "Name: {name} Mb No:" — captures text between "Name:" and "Mb No:"
     /// </summary>
     private static readonly Regex NameRegex = new(
-        @"Name:\s*(.+?)\s*(?:Mb No:|$)",
+        @"Name:\s*(.*?)\s*Mb\s*No",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     /// <summary>

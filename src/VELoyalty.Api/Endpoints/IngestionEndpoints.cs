@@ -145,7 +145,7 @@ public static class IngestionEndpoints
                 // Track unique customers to upsert profiles after processing
                 if (!customerProfiles.ContainsKey(customerId))
                 {
-                    customerProfiles[customerId] = new CustomerInfo(customerName ?? customerId, phone ?? "", 0);
+                    customerProfiles[customerId] = new CustomerInfo(customerName ?? "", phone ?? "", 0);
                 }
                 // Count unique challans per customer (each challan = 1 purchase toward threshold)
                 var customerChallanKey = $"{customerId}#{challanNo}";

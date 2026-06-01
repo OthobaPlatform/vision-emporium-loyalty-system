@@ -179,10 +179,13 @@ public sealed class ItemBuilder
         return this;
     }
 
-    /// <summary>Adds a string list attribute.</summary>
+    /// <summary>Adds a string list attribute. Skips if the list is empty (DynamoDB Local rejects empty L).</summary>
     public ItemBuilder WithStringList(string key, List<string> values)
     {
-        _item[key] = AttributeValueSerializer.ToStringList(values);
+        if (values.Count > 0)
+        {
+            _item[key] = AttributeValueSerializer.ToStringList(values);
+        }
         return this;
     }
 

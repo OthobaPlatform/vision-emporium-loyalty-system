@@ -37,10 +37,10 @@ public static class ExcelSchemaValidator
 
     /// <summary>
     /// Regex to extract phone number from NOTE field.
-    /// Matches: "Mb No: 01xxxxxxxxx"
+    /// Matches: "Mb No: 01xxxxxxxxx" (with flexible whitespace and trailing content)
     /// </summary>
     private static readonly Regex PhoneRegex = new(
-        @"Mb No:\s*(0\d{10})",
+        @"Mb\s*No[:\s]+(0\d{10})",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     /// <summary>

@@ -59,8 +59,9 @@ export function ImportPage() {
 
   function validateAndSetFile(file: File) {
     // Validate file type
-    if (!file.name.endsWith('.xlsx')) {
-      showToast('error', 'Only .xlsx files are supported');
+    const fileName = file.name.toLowerCase();
+    if (!fileName.endsWith('.xlsx') && !fileName.endsWith('.csv')) {
+      showToast('error', 'Only .xlsx and .csv files are supported');
       return;
     }
     // Validate file size (10MB)
@@ -250,12 +251,12 @@ export function ImportPage() {
             <span className="font-medium text-blue-600">Click to browse</span> or drag and drop
           </p>
           <p className="text-xs text-gray-500">
-            .xlsx files only, up to 10MB and 100,000 rows
+            .xlsx and .csv files supported, up to 10MB and 100,000 rows
           </p>
           <input
             ref={fileInputRef}
             type="file"
-            accept=".xlsx"
+            accept=".xlsx,.csv"
             onChange={handleFileSelect}
             className="hidden"
             aria-hidden="true"

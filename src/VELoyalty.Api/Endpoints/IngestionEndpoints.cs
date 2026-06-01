@@ -61,6 +61,8 @@ public static class IngestionEndpoints
             }
 
             var seenChallans = new HashSet<string>();
+            var customerProfiles = new Dictionary<string, CustomerInfo>();
+            var customerChallans = new HashSet<string>();
 
             while (!reader.EndOfStream)
             {
@@ -130,6 +132,33 @@ public static class IngestionEndpoints
                     recordsImported++;
                 else
                     recordsSkipped++; // Already exists in DB
+
+                // Track unique customers to upsert profiles after processing
+                if (!customerProfiles.ContainsKey(customerId))
+                {
+                    customerProfiles[customerId] = new CustomerInfo(customerName ?? customerId, phone ?? "", 0);
+                }
+                // Count unique challans per customer (each challan = 1 purchase toward threshold)
+                var customerChallanKey = $"{customerId}#{challanNo}";
+                if (customerChallans.Add(customerChallanKey))
+                {
+                    var info = customerProfiles[customerId];
+                    customerProfiles[customerId] = info with { PurchaseCount = info.PurchaseCount + 1 };
+                }
+            }
+
+            // Upsert customer profiles with purchase counts
+            var cycleId = "2025-2026"; // Current active cycle
+            foreach (var (custId, info) in customerProfiles)
+            {
+                var customer = new Customer(
+                    CustomerId: custId,
+                    Name: info.Name,
+                    PhoneNumber: info.Phone,
+                    QualifyingPurchases: info.PurchaseCount,
+                    CurrentCycleId: cycleId
+                );
+                await customerRepository.UpsertAsync(customer, cancellationToken);
             }
 
             // Save job result
@@ -319,4 +348,6 @@ public static class IngestionEndpoints
     {
         return row.TryGetValue(key, out var val) ? val : null;
     }
+
+    private record CustomerInfo(string Name, string Phone, int PurchaseCount);
 }

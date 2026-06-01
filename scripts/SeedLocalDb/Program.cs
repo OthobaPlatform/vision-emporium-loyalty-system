@@ -4,6 +4,50 @@ using Amazon.DynamoDBv2.Model;
 var config = new AmazonDynamoDBConfig { ServiceURL = "http://localhost:8000" };
 var client = new AmazonDynamoDBClient("fakeKey", "fakeSecret", config);
 
+// Create table if it doesn't exist
+try
+{
+    await client.CreateTableAsync(new CreateTableRequest
+    {
+        TableName = "VELoyalty",
+        AttributeDefinitions = new List<AttributeDefinition>
+        {
+            new("PK", ScalarAttributeType.S),
+            new("SK", ScalarAttributeType.S),
+            new("GSI1PK", ScalarAttributeType.S),
+            new("GSI1SK", ScalarAttributeType.S),
+            new("GSI2PK", ScalarAttributeType.S),
+            new("GSI2SK", ScalarAttributeType.S),
+        },
+        KeySchema = new List<KeySchemaElement>
+        {
+            new("PK", KeyType.HASH),
+            new("SK", KeyType.RANGE),
+        },
+        GlobalSecondaryIndexes = new List<GlobalSecondaryIndex>
+        {
+            new()
+            {
+                IndexName = "GSI1",
+                KeySchema = new List<KeySchemaElement> { new("GSI1PK", KeyType.HASH), new("GSI1SK", KeyType.RANGE) },
+                Projection = new Projection { ProjectionType = ProjectionType.ALL }
+            },
+            new()
+            {
+                IndexName = "GSI2",
+                KeySchema = new List<KeySchemaElement> { new("GSI2PK", KeyType.HASH), new("GSI2SK", KeyType.RANGE) },
+                Projection = new Projection { ProjectionType = ProjectionType.ALL }
+            }
+        },
+        BillingMode = BillingMode.PAY_PER_REQUEST
+    });
+    Console.WriteLine("Table 'VELoyalty' created.");
+}
+catch (ResourceInUseException)
+{
+    Console.WriteLine("Table 'VELoyalty' already exists.");
+}
+
 var passwordHash = BCrypt.Net.BCrypt.HashPassword("Admin123!", 12);
 Console.WriteLine($"Generated hash: {passwordHash}");
 

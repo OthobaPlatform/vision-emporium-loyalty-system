@@ -152,10 +152,7 @@ public class ImportJobRepository : DynamoDbRepository
                 }).ToList()
             };
         }
-        else
-        {
-            item["rejectedRows"] = new Amazon.DynamoDBv2.Model.AttributeValue { L = [] };
-        }
+        // Skip empty list — DynamoDB doesn't accept empty L attributes
 
         return item;
     }

@@ -18,6 +18,7 @@ public static class IngestionEndpoints
             ImportJobRepository importJobRepository,
             PurchaseRepository purchaseRepository,
             CustomerRepository customerRepository,
+            OutletRepository outletRepository,
             AuditRepository auditRepository,
             CancellationToken cancellationToken) =>
         {
@@ -63,6 +64,7 @@ public static class IngestionEndpoints
             var seenChallans = new HashSet<string>();
             var customerProfiles = new Dictionary<string, CustomerInfo>();
             var customerChallans = new HashSet<string>();
+            var outletsSeen = new Dictionary<string, string>(); // distId -> distName
 
             while (!reader.EndOfStream)
             {
@@ -84,7 +86,14 @@ public static class IngestionEndpoints
 
                 // Extract fields
                 var distId = GetVal(row, "DIST_ID") ?? "";
+                var distName = GetVal(row, "DIST_NAME") ?? "";
                 var itemId = GetVal(row, "ITEM_ID") ?? "";
+
+                // Track outlets from the data
+                if (!string.IsNullOrWhiteSpace(distId) && !outletsSeen.ContainsKey(distId))
+                {
+                    outletsSeen[distId] = distName;
+                }
                 var itemName = GetVal(row, "ITEM_NAME") ?? "";
                 var challanNo = GetVal(row, "CHALLAN_NO") ?? "";
                 var note = GetVal(row, "NOTE") ?? "";
@@ -159,6 +168,20 @@ public static class IngestionEndpoints
                     CurrentCycleId: cycleId
                 );
                 await customerRepository.UpsertAsync(customer, cancellationToken);
+            }
+
+            // Upsert outlets discovered from the data
+            foreach (var (outletId, outletName) in outletsSeen)
+            {
+                var outlet = new Outlet(
+                    OutletId: outletId,
+                    Name: outletName,
+                    Address: "",
+                    PhoneNumber: "",
+                    AssignedManagerId: "",
+                    IsActive: true
+                );
+                await outletRepository.CreateAsync(outlet, cancellationToken);
             }
 
             // Save job result

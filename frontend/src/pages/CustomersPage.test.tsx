@@ -24,7 +24,7 @@ vi.mock('../utils/api', () => ({
   },
 }));
 
-import { apiClient, ApiError } from '../utils/api';
+import { apiClient } from '../utils/api';
 
 const mockedGet = vi.mocked(apiClient.get);
 
@@ -38,197 +38,308 @@ function renderPage() {
   );
 }
 
+const mockCustomers = [
+  {
+    customerId: '+8801712345678',
+    name: 'Rahim Ahmed',
+    phoneNumber: '+8801712345678',
+    qualifyingPurchases: 4,
+  },
+  {
+    customerId: '+8801799999999',
+    name: 'Karim Hossain',
+    phoneNumber: '+8801799999999',
+    qualifyingPurchases: 2,
+  },
+  {
+    customerId: '+8801973776409',
+    name: '',
+    phoneNumber: '+8801973776409',
+    qualifyingPurchases: 0,
+  },
+];
+
 describe('CustomersPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  describe('Search Form', () => {
-    it('renders the search form', () => {
+  describe('Customer List', () => {
+    it('renders the page title and search box', async () => {
+      mockedGet.mockResolvedValueOnce(mockCustomers);
       renderPage();
-      expect(screen.getByText('Customer Lookup')).toBeInTheDocument();
-      expect(screen.getByLabelText('Phone Number')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /look up customer/i })).toBeInTheDocument();
+
+      expect(screen.getByText('Customers')).toBeInTheDocument();
+      expect(screen.getByLabelText('Search customers by phone number')).toBeInTheDocument();
     });
 
-    it('shows error when submitting empty phone', async () => {
-      const user = userEvent.setup();
+    it('loads and displays customers in a table', async () => {
+      mockedGet.mockResolvedValueOnce(mockCustomers);
       renderPage();
-
-      await user.click(screen.getByRole('button', { name: /look up customer/i }));
-
-      expect(screen.getByText('Phone number is required')).toBeInTheDocument();
-    });
-
-    it('shows error for invalid phone format', async () => {
-      const user = userEvent.setup();
-      renderPage();
-
-      await user.type(screen.getByLabelText('Phone Number'), '01712345678');
-      await user.click(screen.getByRole('button', { name: /look up customer/i }));
-
-      expect(
-        screen.getByText(
-          'Phone number must be in E.164 format with +880 prefix (e.g., +8801712345678)'
-        )
-      ).toBeInTheDocument();
-    });
-
-    it('clears error when user starts typing', async () => {
-      const user = userEvent.setup();
-      renderPage();
-
-      await user.click(screen.getByRole('button', { name: /look up customer/i }));
-      expect(screen.getByText('Phone number is required')).toBeInTheDocument();
-
-      await user.type(screen.getByLabelText('Phone Number'), '+');
-      expect(screen.queryByText('Phone number is required')).not.toBeInTheDocument();
-    });
-  });
-
-  describe('Customer Profile Display', () => {
-    it('displays customer profile on successful lookup', async () => {
-      const user = userEvent.setup();
-      mockedGet.mockResolvedValueOnce({
-        customerId: 'CUST001',
-        name: 'Rahim Ahmed',
-        phoneNumber: '+8801712345678',
-        qualifyingPurchases: 4,
-        progress: { current: 1, target: 6, nextThreshold: 6 },
-        codes: [],
-      });
-
-      renderPage();
-
-      await user.type(screen.getByLabelText('Phone Number'), '+8801712345678');
-      await user.click(screen.getByRole('button', { name: /look up customer/i }));
 
       await waitFor(() => {
         expect(screen.getByText('Rahim Ahmed')).toBeInTheDocument();
       });
       expect(screen.getByText('+8801712345678')).toBeInTheDocument();
-      expect(screen.getByText('4')).toBeInTheDocument();
+      expect(screen.getByText('Karim Hossain')).toBeInTheDocument();
+      expect(screen.getByText('+8801799999999')).toBeInTheDocument();
     });
 
-    it('displays progress toward next threshold', async () => {
+    it('shows phone number as name when name is empty', async () => {
+      mockedGet.mockResolvedValueOnce(mockCustomers);
+      renderPage();
+
+      await waitFor(() => {
+        // The customer with empty name should show phone as the clickable link
+        const links = screen.getAllByRole('button');
+        const phoneAsName = links.find((btn) => btn.textContent === '+8801973776409');
+        expect(phoneAsName).toBeInTheDocument();
+      });
+    });
+
+    it('filters customers by phone number search', async () => {
       const user = userEvent.setup();
+      mockedGet.mockResolvedValueOnce(mockCustomers);
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByText('Rahim Ahmed')).toBeInTheDocument();
+      });
+
+      await user.type(
+        screen.getByLabelText('Search customers by phone number'),
+        '9999'
+      );
+
+      // Only Karim should be visible
+      expect(screen.queryByText('Rahim Ahmed')).not.toBeInTheDocument();
+      expect(screen.getByText('Karim Hossain')).toBeInTheDocument();
+    });
+
+    it('shows empty message when no customers match search', async () => {
+      const user = userEvent.setup();
+      mockedGet.mockResolvedValueOnce(mockCustomers);
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByText('Rahim Ahmed')).toBeInTheDocument();
+      });
+
+      await user.type(
+        screen.getByLabelText('Search customers by phone number'),
+        'nonexistent'
+      );
+
+      expect(screen.getByText('No customers match your search.')).toBeInTheDocument();
+    });
+  });
+
+  describe('Customer Detail Panel', () => {
+    it('opens detail panel when customer name is clicked', async () => {
+      const user = userEvent.setup();
+      mockedGet.mockResolvedValueOnce(mockCustomers);
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByText('Rahim Ahmed')).toBeInTheDocument();
+      });
+
+      // Mock the profile and codes API calls
       mockedGet.mockResolvedValueOnce({
-        customerId: 'CUST001',
+        customerId: '+8801712345678',
         name: 'Rahim Ahmed',
         phoneNumber: '+8801712345678',
-        qualifyingPurchases: 2,
-        progress: { current: 2, target: 3, nextThreshold: 3 },
+        qualifyingPurchases: 4,
+        currentCycleId: 'cycle-1',
+        progress: {
+          currentPurchases: 4,
+          nextThreshold: 6,
+          nextThresholdTier: 2,
+          isComplete: false,
+          description: '4 of 6 purchases',
+        },
+      });
+      mockedGet.mockResolvedValueOnce({
+        customerId: '+8801712345678',
+        name: 'Rahim Ahmed',
+        phoneNumber: '+8801712345678',
         codes: [],
       });
 
-      renderPage();
-
-      await user.type(screen.getByLabelText('Phone Number'), '+8801712345678');
-      await user.click(screen.getByRole('button', { name: /look up customer/i }));
+      await user.click(screen.getByText('Rahim Ahmed'));
 
       await waitFor(() => {
-        expect(screen.getByRole('progressbar')).toBeInTheDocument();
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
       });
-      expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '2');
-      expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuemax', '3');
-      expect(screen.getByRole('progressbar')).toHaveAttribute('aria-label', '2 of 3 purchases');
+      expect(screen.getByText('Customer Details')).toBeInTheDocument();
+      expect(screen.getByRole('progressbar')).toBeInTheDocument();
     });
 
-    it('displays completion status when all thresholds achieved', async () => {
+    it('shows progress bar with brand red color', async () => {
       const user = userEvent.setup();
+      mockedGet.mockResolvedValueOnce(mockCustomers);
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByText('Rahim Ahmed')).toBeInTheDocument();
+      });
+
       mockedGet.mockResolvedValueOnce({
-        customerId: 'CUST001',
+        customerId: '+8801712345678',
         name: 'Rahim Ahmed',
         phoneNumber: '+8801712345678',
-        qualifyingPurchases: 6,
-        progress: { current: 6, target: 6, nextThreshold: null },
+        qualifyingPurchases: 4,
+        currentCycleId: 'cycle-1',
+        progress: {
+          currentPurchases: 4,
+          nextThreshold: 6,
+          nextThresholdTier: 2,
+          isComplete: false,
+          description: '4 of 6 purchases',
+        },
+      });
+      mockedGet.mockResolvedValueOnce({
+        customerId: '+8801712345678',
+        name: 'Rahim Ahmed',
+        phoneNumber: '+8801712345678',
         codes: [],
       });
 
-      renderPage();
-
-      await user.type(screen.getByLabelText('Phone Number'), '+8801712345678');
-      await user.click(screen.getByRole('button', { name: /look up customer/i }));
+      await user.click(screen.getByText('Rahim Ahmed'));
 
       await waitFor(() => {
-        expect(
-          screen.getByText(/all reward tiers achieved/i)
-        ).toBeInTheDocument();
+        const progressBar = screen.getByRole('progressbar');
+        expect(progressBar).toHaveStyle({ backgroundColor: '#E31837' });
       });
     });
 
-    it('displays verification codes table', async () => {
+    it('shows verification codes in detail panel', async () => {
       const user = userEvent.setup();
+      mockedGet.mockResolvedValueOnce(mockCustomers);
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByText('Rahim Ahmed')).toBeInTheDocument();
+      });
+
       mockedGet.mockResolvedValueOnce({
-        customerId: 'CUST001',
+        customerId: '+8801712345678',
         name: 'Rahim Ahmed',
         phoneNumber: '+8801712345678',
-        qualifyingPurchases: 3,
-        progress: { current: 0, target: 6, nextThreshold: 6 },
+        qualifyingPurchases: 4,
+        currentCycleId: 'cycle-1',
+        progress: {
+          currentPurchases: 4,
+          nextThreshold: 6,
+          nextThresholdTier: 2,
+          isComplete: false,
+          description: '4 of 6 purchases',
+        },
+      });
+      mockedGet.mockResolvedValueOnce({
+        customerId: '+8801712345678',
+        name: 'Rahim Ahmed',
+        phoneNumber: '+8801712345678',
         codes: [
           {
-            code: '123456',
-            tier: 1,
+            code: 'ABC123',
+            status: 'Active',
+            giftTier: 1,
             giftType: 'Cash_Return',
             giftDescription: '500 BDT Cash Back',
-            status: 'Active',
+            giftValue: 500,
             designatedOutlet: 'Outlet Dhaka',
             issuedAt: '2024-01-10T00:00:00Z',
-            expiresAt: '2024-02-09T00:00:00Z',
           },
         ],
       });
 
-      renderPage();
-
-      await user.type(screen.getByLabelText('Phone Number'), '+8801712345678');
-      await user.click(screen.getByRole('button', { name: /look up customer/i }));
+      await user.click(screen.getByText('Rahim Ahmed'));
 
       await waitFor(() => {
-        expect(screen.getByText('123456')).toBeInTheDocument();
+        expect(screen.getByText('ABC123')).toBeInTheDocument();
       });
       expect(screen.getByText('Cash_Return')).toBeInTheDocument();
       expect(screen.getByText('Outlet Dhaka')).toBeInTheDocument();
     });
 
-    it('shows not found message for 404 response', async () => {
+    it('closes detail panel when close button is clicked', async () => {
       const user = userEvent.setup();
-      mockedGet.mockRejectedValueOnce(
-        new ApiError(404, 'Not Found', { error: 'NotFound', message: 'Customer not found' })
-      );
-
+      mockedGet.mockResolvedValueOnce(mockCustomers);
       renderPage();
 
-      await user.type(screen.getByLabelText('Phone Number'), '+8801799999999');
-      await user.click(screen.getByRole('button', { name: /look up customer/i }));
-
       await waitFor(() => {
-        expect(
-          screen.getByText(/no customer found with this phone number/i)
-        ).toBeInTheDocument();
+        expect(screen.getByText('Rahim Ahmed')).toBeInTheDocument();
       });
-    });
 
-    it('shows no codes message when customer has no verification codes', async () => {
-      const user = userEvent.setup();
       mockedGet.mockResolvedValueOnce({
-        customerId: 'CUST001',
+        customerId: '+8801712345678',
         name: 'Rahim Ahmed',
         phoneNumber: '+8801712345678',
-        qualifyingPurchases: 1,
-        progress: { current: 1, target: 3, nextThreshold: 3 },
+        qualifyingPurchases: 4,
+        currentCycleId: 'cycle-1',
+        progress: {
+          currentPurchases: 4,
+          nextThreshold: 6,
+          nextThresholdTier: 2,
+          isComplete: false,
+          description: '4 of 6 purchases',
+        },
+      });
+      mockedGet.mockResolvedValueOnce({
+        customerId: '+8801712345678',
+        name: 'Rahim Ahmed',
+        phoneNumber: '+8801712345678',
         codes: [],
       });
 
-      renderPage();
-
-      await user.type(screen.getByLabelText('Phone Number'), '+8801712345678');
-      await user.click(screen.getByRole('button', { name: /look up customer/i }));
+      await user.click(screen.getByText('Rahim Ahmed'));
 
       await waitFor(() => {
-        expect(
-          screen.getByText(/no verification codes issued/i)
-        ).toBeInTheDocument();
+        expect(screen.getByRole('dialog')).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByLabelText('Close detail panel'));
+
+      await waitFor(() => {
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      });
+    });
+
+    it('shows all tiers achieved message when complete', async () => {
+      const user = userEvent.setup();
+      mockedGet.mockResolvedValueOnce(mockCustomers);
+      renderPage();
+
+      await waitFor(() => {
+        expect(screen.getByText('Rahim Ahmed')).toBeInTheDocument();
+      });
+
+      mockedGet.mockResolvedValueOnce({
+        customerId: '+8801712345678',
+        name: 'Rahim Ahmed',
+        phoneNumber: '+8801712345678',
+        qualifyingPurchases: 10,
+        currentCycleId: 'cycle-1',
+        progress: {
+          currentPurchases: 10,
+          nextThreshold: null,
+          nextThresholdTier: null,
+          isComplete: true,
+          description: 'All reward tiers achieved',
+        },
+      });
+      mockedGet.mockResolvedValueOnce({
+        customerId: '+8801712345678',
+        name: 'Rahim Ahmed',
+        phoneNumber: '+8801712345678',
+        codes: [],
+      });
+
+      await user.click(screen.getByText('Rahim Ahmed'));
+
+      await waitFor(() => {
+        expect(screen.getByText(/all reward tiers achieved/i)).toBeInTheDocument();
       });
     });
   });

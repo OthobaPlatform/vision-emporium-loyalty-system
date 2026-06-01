@@ -97,6 +97,49 @@ public class CustomerRepository : DynamoDbRepository
     }
 
     /// <summary>
+    /// Lists all customer profiles from the table.
+    /// Scans for items where SK = "PROFILE" and PK starts with "CUST#".
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>List of all customer records.</returns>
+    public async Task<List<Customer>> ListAllAsync(CancellationToken cancellationToken = default)
+    {
+        var results = new List<Customer>();
+        Dictionary<string, AttributeValue>? lastEvaluatedKey = null;
+
+        do
+        {
+            var request = new Amazon.DynamoDBv2.Model.ScanRequest
+            {
+                TableName = Context.Table,
+                FilterExpression = "SK = :sk AND begins_with(PK, :pkPrefix)",
+                ExpressionAttributeValues = new Dictionary<string, AttributeValue>
+                {
+                    [":sk"] = AttributeValueSerializer.ToS("PROFILE"),
+                    [":pkPrefix"] = AttributeValueSerializer.ToS("CUST#")
+                }
+            };
+
+            if (lastEvaluatedKey is not null)
+                request.ExclusiveStartKey = lastEvaluatedKey;
+
+            var response = await Context.Client.ScanAsync(request, cancellationToken);
+
+            foreach (var item in response.Items)
+            {
+                results.Add(MapToCustomer(item));
+            }
+
+            lastEvaluatedKey = response.LastEvaluatedKey is { Count: > 0 }
+                ? response.LastEvaluatedKey
+                : null;
+
+        } while (lastEvaluatedKey is not null);
+
+        return results;
+    }
+
+    /// <summary>
     /// Gets the count of active customers in a given cycle (qualifying purchases > 0).
     /// Uses a scan with filter for MVP. In production, maintain a counter.
     /// </summary>

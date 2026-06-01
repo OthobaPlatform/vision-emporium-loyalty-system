@@ -29,6 +29,33 @@ public class CustomerService
     }
 
     /// <summary>
+    /// Lists all customers, optionally filtered by phone number partial match.
+    /// </summary>
+    /// <param name="search">Optional phone number search filter (partial match).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>List of customer summary records.</returns>
+    public async Task<List<CustomerListItem>> ListAllCustomersAsync(
+        string? search,
+        CancellationToken cancellationToken = default)
+    {
+        var customers = await _customerRepository.ListAllAsync(cancellationToken);
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            customers = customers
+                .Where(c => c.PhoneNumber.Contains(search, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
+        return customers.Select(c => new CustomerListItem(
+            CustomerId: c.CustomerId,
+            Name: c.Name,
+            PhoneNumber: c.PhoneNumber,
+            QualifyingPurchases: c.QualifyingPurchases
+        )).ToList();
+    }
+
+    /// <summary>
     /// Gets the full customer profile with progress information.
     /// </summary>
     /// <param name="phoneNumber">Customer phone number in E.164 format.</param>
@@ -297,4 +324,11 @@ public record RedemptionSearchResult(
     string OutletId,
     DateTime IssuedAt,
     DateTime ExpiresAt
+);
+
+public record CustomerListItem(
+    string CustomerId,
+    string Name,
+    string PhoneNumber,
+    int QualifyingPurchases
 );

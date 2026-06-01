@@ -8,6 +8,16 @@ public static class CustomerEndpoints
 {
     public static RouteGroupBuilder MapCustomerEndpoints(this RouteGroupBuilder group)
     {
+        // GET /customers
+        group.MapGet("/customers", async (
+            string? search,
+            CustomerService customerService,
+            CancellationToken cancellationToken) =>
+        {
+            var customers = await customerService.ListAllCustomersAsync(search, cancellationToken);
+            return Results.Ok(customers);
+        }).RequireAnyRole().MapToApiVersion(1, 0);
+
         // GET /customers/{phone}
         group.MapGet("/customers/{phone}", async (
             string phone,

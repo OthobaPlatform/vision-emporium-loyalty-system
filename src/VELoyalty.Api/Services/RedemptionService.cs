@@ -14,19 +14,25 @@ public class RedemptionService
     private readonly RateLimitRepository _rateLimitRepository;
     private readonly OutletRepository _outletRepository;
     private readonly AuditRepository _auditRepository;
+    private readonly CustomerRepository _customerRepository;
+    private readonly SmsService _smsService;
 
     public RedemptionService(
         VerificationCodeRepository verificationCodeRepository,
         RedemptionRepository redemptionRepository,
         RateLimitRepository rateLimitRepository,
         OutletRepository outletRepository,
-        AuditRepository auditRepository)
+        AuditRepository auditRepository,
+        CustomerRepository customerRepository,
+        SmsService smsService)
     {
         _verificationCodeRepository = verificationCodeRepository;
         _redemptionRepository = redemptionRepository;
         _rateLimitRepository = rateLimitRepository;
         _outletRepository = outletRepository;
         _auditRepository = auditRepository;
+        _customerRepository = customerRepository;
+        _smsService = smsService;
     }
 
     /// <summary>
@@ -152,6 +158,17 @@ public class RedemptionService
             Timestamp: utcNow);
 
         await _auditRepository.AppendAsync(auditEntry, cancellationToken);
+
+        // Send redemption confirmation SMS
+        var customer = await _customerRepository.GetByIdAsync(verificationCode.CustomerId, cancellationToken);
+        if (customer is not null && !string.IsNullOrWhiteSpace(customer.PhoneNumber))
+        {
+            await _smsService.SendRedemptionConfirmationSmsAsync(
+                customer.PhoneNumber,
+                customer.Name,
+                verificationCode.GiftDescription,
+                cancellationToken);
+        }
 
         return RedemptionVerificationResult.Success(
             verificationCode.CustomerId,

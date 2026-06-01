@@ -10,7 +10,7 @@ builder.AddJsonSerialization();
 
 // ─── Services ───────────────────────────────────────────────────────────────────
 builder.Services.AddInfrastructure(builder.Configuration);
-builder.Services.AddApplicationServices();
+builder.Services.AddApplicationServices(builder.Configuration);
 builder.Services.AddAuthServices(builder.Configuration);
 builder.Services.AddApiVersioningServices();
 

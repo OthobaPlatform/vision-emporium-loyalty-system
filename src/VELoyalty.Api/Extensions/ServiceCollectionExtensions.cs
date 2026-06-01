@@ -1,9 +1,12 @@
 using Amazon.DynamoDBv2;
 using Asp.Versioning;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using VELoyalty.Api.Services;
 using VELoyalty.Auth;
 using VELoyalty.Data;
 using VELoyalty.Data.Repositories;
+using VELoyalty.Notifications;
 
 namespace VELoyalty.Api.Extensions;
 
@@ -52,7 +55,7 @@ public static class ServiceCollectionExtensions
     /// <summary>
     /// Registers all business/application services.
     /// </summary>
-    public static IServiceCollection AddApplicationServices(this IServiceCollection services)
+    public static IServiceCollection AddApplicationServices(this IServiceCollection services, IConfiguration config)
     {
         services.AddSingleton<CustomerService>();
         services.AddSingleton<OutletService>();
@@ -60,6 +63,19 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ConfigurationService>();
         services.AddSingleton<DashboardService>();
         services.AddSingleton<RedemptionService>();
+        services.AddSingleton<EligibilityService>();
+        services.AddSingleton<SmsService>();
+
+        // SMS gateway registration
+        services.Configure<SmsGatewayOptions>(config.GetSection("Sms"));
+        services.AddSingleton<ISmsGatewayClient>(sp =>
+        {
+            var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+            var options = sp.GetRequiredService<IOptions<SmsGatewayOptions>>();
+            var logger = sp.GetRequiredService<ILogger<SmsGatewayClient>>();
+            return new SmsGatewayClient(httpClientFactory.CreateClient("SmsGateway"), options, logger);
+        });
+        services.AddHttpClient("SmsGateway");
 
         return services;
     }

@@ -20,6 +20,7 @@ public static class IngestionEndpoints
             CustomerRepository customerRepository,
             OutletRepository outletRepository,
             AuditRepository auditRepository,
+            EligibilityService eligibilityService,
             CancellationToken cancellationToken) =>
         {
             var form = await httpContext.Request.ReadFormAsync(cancellationToken);
@@ -65,6 +66,7 @@ public static class IngestionEndpoints
             var customerProfiles = new Dictionary<string, CustomerInfo>();
             var customerChallans = new HashSet<string>();
             var outletsSeen = new Dictionary<string, string>(); // distId -> distName
+            var customerLastOutlet = new Dictionary<string, string>(); // customerId -> last outletId
 
             while (!reader.EndOfStream)
             {
@@ -142,6 +144,9 @@ public static class IngestionEndpoints
                 else
                     recordsSkipped++; // Already exists in DB
 
+                // Track last outlet per customer for eligibility evaluation
+                customerLastOutlet[customerId] = distId;
+
                 // Track unique customers to upsert profiles after processing
                 if (!customerProfiles.ContainsKey(customerId))
                 {
@@ -182,6 +187,33 @@ public static class IngestionEndpoints
                     IsActive: true
                 );
                 await outletRepository.CreateAsync(outlet, cancellationToken);
+            }
+
+            // Evaluate eligibility for each customer whose purchase count changed
+            foreach (var (custId, info) in customerProfiles)
+            {
+                if (string.IsNullOrWhiteSpace(info.Phone))
+                    continue; // Can't send SMS without a phone number
+
+                var custOutletId = customerLastOutlet.GetValueOrDefault(custId, "");
+                if (string.IsNullOrWhiteSpace(custOutletId))
+                    continue;
+
+                try
+                {
+                    await eligibilityService.EvaluateEligibilityAsync(
+                        custId,
+                        info.Name,
+                        info.Phone,
+                        info.PurchaseCount,
+                        custOutletId,
+                        cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    // Don't fail the import if eligibility evaluation fails
+                    _ = ex; // Suppress unused variable warning
+                }
             }
 
             // Save job result

@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using VELoyalty.Api.Services;
 using VELoyalty.Auth;
 
@@ -5,19 +6,19 @@ namespace VELoyalty.Api.Endpoints;
 
 public static class UserEndpoints
 {
-    public static WebApplication MapUserEndpoints(this WebApplication app)
+    public static RouteGroupBuilder MapUserEndpoints(this RouteGroupBuilder group)
     {
-        // GET /api/v1/users
-        app.MapGet("/api/v1/users", async (
+        // GET /users
+        group.MapGet("/users", async (
             UserService userService,
             CancellationToken cancellationToken) =>
         {
             var users = await userService.ListUsersAsync(cancellationToken);
             return Results.Ok(new { users });
-        }).RequireAdmin();
+        }).RequireAdmin().MapToApiVersion(1, 0);
 
-        // POST /api/v1/users
-        app.MapPost("/api/v1/users", async (
+        // POST /users
+        group.MapPost("/users", async (
             CreateUserRequest request,
             UserService userService,
             CancellationToken cancellationToken) =>
@@ -28,10 +29,10 @@ public static class UserEndpoints
                 return Results.BadRequest(new { error = "ValidationError", details = result.ValidationErrors });
 
             return Results.Created($"/api/v1/users/{result.User!.UserId}", result.User);
-        }).RequireAdmin();
+        }).RequireAdmin().MapToApiVersion(1, 0);
 
-        // PUT /api/v1/users/{id}
-        app.MapPut("/api/v1/users/{id}", async (
+        // PUT /users/{id}
+        group.MapPut("/users/{id}", async (
             string id,
             UpdateUserRequest request,
             UserService userService,
@@ -46,8 +47,8 @@ public static class UserEndpoints
                 return Results.BadRequest(new { error = "ValidationError", details = result.ValidationErrors });
 
             return Results.Ok(result.User);
-        }).RequireAdmin();
+        }).RequireAdmin().MapToApiVersion(1, 0);
 
-        return app;
+        return group;
     }
 }

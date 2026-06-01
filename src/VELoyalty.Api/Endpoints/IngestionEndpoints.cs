@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using VELoyalty.Api.Services;
 using VELoyalty.Auth;
 using VELoyalty.Core;
@@ -7,10 +8,10 @@ namespace VELoyalty.Api.Endpoints;
 
 public static class IngestionEndpoints
 {
-    public static WebApplication MapIngestionEndpoints(this WebApplication app)
+    public static RouteGroupBuilder MapIngestionEndpoints(this RouteGroupBuilder group)
     {
-        // POST /api/v1/ingestion/upload
-        app.MapPost("/api/v1/ingestion/upload", async (
+        // POST /ingestion/upload
+        group.MapPost("/ingestion/upload", async (
             HttpContext httpContext,
             ImportJobRepository importJobRepository,
             AuditRepository auditRepository,
@@ -67,10 +68,10 @@ public static class IngestionEndpoints
             await importJobRepository.UpdateAsync(completedJob, cancellationToken);
 
             return Results.Ok(new { jobId, status = "Completed", message = "File uploaded and processed." });
-        }).RequireAdmin().DisableAntiforgery();
+        }).RequireAdmin().DisableAntiforgery().MapToApiVersion(1, 0);
 
-        // GET /api/v1/ingestion/jobs/{id}
-        app.MapGet("/api/v1/ingestion/jobs/{id}", async (
+        // GET /ingestion/jobs/{id}
+        group.MapGet("/ingestion/jobs/{id}", async (
             string id,
             ImportJobRepository importJobRepository,
             CancellationToken cancellationToken) =>
@@ -80,10 +81,10 @@ public static class IngestionEndpoints
                 return Results.NotFound(new { error = "NotFound", message = "Import job not found." });
 
             return Results.Ok(job);
-        }).RequireAdmin();
+        }).RequireAdmin().MapToApiVersion(1, 0);
 
-        // GET /api/v1/ingestion/template
-        app.MapGet("/api/v1/ingestion/template", () =>
+        // GET /ingestion/template
+        group.MapGet("/ingestion/template", () =>
         {
             var csvContent = "DIST_ID,DIST_NAME,ITEM_ID,ITEM_NAME,OC_QTY,SR_QNTY,AMNT,CHALLAN_DATE,CHALLAN_NO,COMMP,NET_AMNT,NOTE\n" +
                              "20152,Vision Emporium-Uttar Badda,969121,CHAMPION DAY LIGHT BULB 13W B22(Pin),1,0,0.2650,22/05/2026 12:00:00 AM,OC20152-01-2605000267,0.0530,0.2120,\"Name: John Doe Mb No: 01712345678 Note:\"\n";
@@ -92,10 +93,10 @@ public static class IngestionEndpoints
                 System.Text.Encoding.UTF8.GetBytes(csvContent),
                 "text/csv",
                 "ve-loyalty-import-template.csv");
-        }).RequireAdmin();
+        }).RequireAdmin().MapToApiVersion(1, 0);
 
-        // POST /api/v1/ingestion/sync
-        app.MapPost("/api/v1/ingestion/sync", async (
+        // POST /ingestion/sync
+        group.MapPost("/ingestion/sync", async (
             HttpContext httpContext,
             SyncJobRepository syncJobRepository,
             AuditRepository auditRepository,
@@ -136,10 +137,10 @@ public static class IngestionEndpoints
                 Status: "InProgress",
                 Message: "Sync job has been triggered successfully."
             ));
-        }).RequireAdmin();
+        }).RequireAdmin().MapToApiVersion(1, 0);
 
-        // GET /api/v1/ingestion/sync/status
-        app.MapGet("/api/v1/ingestion/sync/status", async (
+        // GET /ingestion/sync/status
+        group.MapGet("/ingestion/sync/status", async (
             SyncJobRepository syncJobRepository,
             CancellationToken cancellationToken) =>
         {
@@ -157,8 +158,8 @@ public static class IngestionEndpoints
             )).ToList();
 
             return Results.Ok(new { jobs = results });
-        }).RequireAdmin();
+        }).RequireAdmin().MapToApiVersion(1, 0);
 
-        return app;
+        return group;
     }
 }

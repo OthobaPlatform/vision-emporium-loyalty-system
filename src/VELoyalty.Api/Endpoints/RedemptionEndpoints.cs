@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Asp.Versioning;
 using VELoyalty.Api.Services;
 using VELoyalty.Auth;
 
@@ -6,10 +7,10 @@ namespace VELoyalty.Api.Endpoints;
 
 public static class RedemptionEndpoints
 {
-    public static WebApplication MapRedemptionEndpoints(this WebApplication app)
+    public static RouteGroupBuilder MapRedemptionEndpoints(this RouteGroupBuilder group)
     {
-        // POST /api/v1/redemptions/verify
-        app.MapPost("/api/v1/redemptions/verify", async (
+        // POST /redemptions/verify
+        group.MapPost("/redemptions/verify", async (
             HttpContext httpContext,
             RedemptionService redemptionService,
             CancellationToken cancellationToken) =>
@@ -56,10 +57,10 @@ public static class RedemptionEndpoints
                     redeemedAt = result.RedeemedAt
                 }
             });
-        }).RequireAnyRole();
+        }).RequireAnyRole().MapToApiVersion(1, 0);
 
-        // GET /api/v1/redemptions/search
-        app.MapGet("/api/v1/redemptions/search", async (
+        // GET /redemptions/search
+        group.MapGet("/redemptions/search", async (
             string? phone,
             string? code,
             HttpContext httpContext,
@@ -83,9 +84,9 @@ public static class RedemptionEndpoints
             }
 
             return Results.Ok(new { results });
-        }).RequireAnyRole();
+        }).RequireAnyRole().MapToApiVersion(1, 0);
 
-        return app;
+        return group;
     }
 }
 

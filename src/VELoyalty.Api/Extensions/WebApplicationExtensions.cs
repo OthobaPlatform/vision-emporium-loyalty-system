@@ -1,3 +1,5 @@
+using Asp.Versioning;
+using Asp.Versioning.Builder;
 using VELoyalty.Api.Endpoints;
 using VELoyalty.Auth;
 
@@ -16,21 +18,36 @@ public static class WebApplicationExtensions
     }
 
     /// <summary>
-    /// Maps all VELoyalty API endpoint groups.
+    /// Maps all VELoyalty API endpoint groups using versioned route groups.
     /// </summary>
     public static WebApplication MapVELoyaltyEndpoints(this WebApplication app)
     {
-        app.MapGet("/api/v1/health", () => Results.Ok(new { Status = "Healthy", Service = "VELoyalty.Api" }));
+        var versionSet = app.NewApiVersionSet()
+            .HasApiVersion(new ApiVersion(1, 0))
+            .ReportApiVersions()
+            .Build();
 
-        app.MapAuthEndpoints();
-        app.MapRedemptionEndpoints();
-        app.MapCustomerEndpoints();
-        app.MapOutletEndpoints();
-        app.MapUserEndpoints();
-        app.MapConfigurationEndpoints();
-        app.MapDashboardEndpoints();
-        app.MapIngestionEndpoints();
+        var v1 = app.MapGroup("api/v{version:apiVersion}")
+            .WithApiVersionSet(versionSet);
+
+        v1.MapHealthEndpoints();
+        v1.MapAuthEndpoints();
+        v1.MapRedemptionEndpoints();
+        v1.MapCustomerEndpoints();
+        v1.MapOutletEndpoints();
+        v1.MapUserEndpoints();
+        v1.MapConfigurationEndpoints();
+        v1.MapDashboardEndpoints();
+        v1.MapIngestionEndpoints();
 
         return app;
+    }
+
+    private static RouteGroupBuilder MapHealthEndpoints(this RouteGroupBuilder group)
+    {
+        group.MapGet("/health", () => Results.Ok(new { Status = "Healthy", Service = "VELoyalty.Api" }))
+            .MapToApiVersion(1, 0);
+
+        return group;
     }
 }

@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using VELoyalty.Api.Services;
 using VELoyalty.Auth;
 
@@ -5,10 +6,10 @@ namespace VELoyalty.Api.Endpoints;
 
 public static class CustomerEndpoints
 {
-    public static WebApplication MapCustomerEndpoints(this WebApplication app)
+    public static RouteGroupBuilder MapCustomerEndpoints(this RouteGroupBuilder group)
     {
-        // GET /api/v1/customers/{phone}
-        app.MapGet("/api/v1/customers/{phone}", async (
+        // GET /customers/{phone}
+        group.MapGet("/customers/{phone}", async (
             string phone,
             CustomerService customerService,
             CancellationToken cancellationToken) =>
@@ -21,10 +22,10 @@ public static class CustomerEndpoints
             }
 
             return Results.Ok(profile);
-        }).RequireAnyRole();
+        }).RequireAnyRole().MapToApiVersion(1, 0);
 
-        // GET /api/v1/customers/{phone}/codes
-        app.MapGet("/api/v1/customers/{phone}/codes", async (
+        // GET /customers/{phone}/codes
+        group.MapGet("/customers/{phone}/codes", async (
             string phone,
             CustomerService customerService,
             CancellationToken cancellationToken) =>
@@ -37,8 +38,8 @@ public static class CustomerEndpoints
             }
 
             return Results.Ok(codesResponse);
-        }).RequireAnyRole();
+        }).RequireAnyRole().MapToApiVersion(1, 0);
 
-        return app;
+        return group;
     }
 }

@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using VELoyalty.Api.Services;
 using VELoyalty.Auth;
 using VELoyalty.Data.Repositories;
@@ -6,19 +7,19 @@ namespace VELoyalty.Api.Endpoints;
 
 public static class DashboardEndpoints
 {
-    public static WebApplication MapDashboardEndpoints(this WebApplication app)
+    public static RouteGroupBuilder MapDashboardEndpoints(this RouteGroupBuilder group)
     {
-        // GET /api/v1/dashboard
-        app.MapGet("/api/v1/dashboard", async (
+        // GET /dashboard
+        group.MapGet("/dashboard", async (
             DashboardService dashboardService,
             CancellationToken cancellationToken) =>
         {
             var summary = await dashboardService.GetDashboardSummaryAsync(cancellationToken);
             return Results.Ok(summary);
-        }).RequireAdmin();
+        }).RequireAdmin().MapToApiVersion(1, 0);
 
-        // GET /api/v1/audit
-        app.MapGet("/api/v1/audit", async (
+        // GET /audit
+        group.MapGet("/audit", async (
             DateTime? startDate,
             DateTime? endDate,
             string? eventType,
@@ -51,8 +52,8 @@ public static class DashboardEndpoints
             )).ToList();
 
             return Results.Ok(new { entries = results });
-        }).RequireAdmin();
+        }).RequireAdmin().MapToApiVersion(1, 0);
 
-        return app;
+        return group;
     }
 }

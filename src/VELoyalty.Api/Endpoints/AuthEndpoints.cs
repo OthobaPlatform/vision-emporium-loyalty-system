@@ -1,3 +1,4 @@
+using Asp.Versioning;
 using VELoyalty.Auth;
 using VELoyalty.Data.Repositories;
 
@@ -5,9 +6,9 @@ namespace VELoyalty.Api.Endpoints;
 
 public static class AuthEndpoints
 {
-    public static WebApplication MapAuthEndpoints(this WebApplication app)
+    public static RouteGroupBuilder MapAuthEndpoints(this RouteGroupBuilder group)
     {
-        app.MapPost("/api/v1/auth/login", async (
+        group.MapPost("/auth/login", async (
             HttpContext httpContext,
             UserRepository userRepository,
             IPasswordHasher passwordHasher,
@@ -32,9 +33,9 @@ public static class AuthEndpoints
 
             var authToken = jwtTokenService.GenerateToken(user.UserId, user.Role, user.OutletId);
             return Results.Ok(new { token = authToken.Token, expiresAt = authToken.ExpiresAt });
-        });
+        }).MapToApiVersion(1, 0);
 
-        return app;
+        return group;
     }
 }
 

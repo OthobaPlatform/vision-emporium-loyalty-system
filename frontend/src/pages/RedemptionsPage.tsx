@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
 import { apiClient, ApiError } from '../utils/api';
 import { LoadingIndicator, useToast } from '../components';
 
@@ -158,6 +159,10 @@ export function RedemptionsPage() {
 
   return (
     <div>
+      <Helmet>
+        <title>Redemptions | Vision Emporium Loyalty</title>
+      </Helmet>
+
       {showUnauthorized && (
         <div
           className="mb-6 rounded-md bg-yellow-50 border border-yellow-200 p-4"

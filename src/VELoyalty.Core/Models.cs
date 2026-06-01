@@ -280,6 +280,20 @@ public record GeneralConfig(
 );
 
 /// <summary>
+/// Represents SMS gateway configuration stored in DynamoDB.
+/// </summary>
+/// <param name="Enabled">Whether SMS sending is enabled.</param>
+/// <param name="BaseUrl">Base URL of the SMS gateway API.</param>
+/// <param name="ApiKey">API key for authenticating with the SMS gateway.</param>
+/// <param name="SenderId">Sender ID displayed on the SMS.</param>
+public record SmsConfig(
+    bool Enabled,
+    string BaseUrl,
+    string ApiKey,
+    string SenderId
+);
+
+/// <summary>
 /// Represents a signed JWT authentication token.
 /// </summary>
 /// <param name="Token">Signed JWT string (HMAC-SHA256).</param>

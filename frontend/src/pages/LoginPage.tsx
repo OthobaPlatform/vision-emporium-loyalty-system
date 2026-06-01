@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Helmet } from 'react-helmet-async';
 import { useAuth } from '../contexts/AuthContext';
 import { VisionEmporiumLogo } from '../components/VisionEmporiumLogo';
 
@@ -60,6 +61,9 @@ export function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-[#D6E4F0] px-4 py-12 sm:px-6 lg:px-8">
+      <Helmet>
+        <title>Sign In | Vision Emporium Loyalty</title>
+      </Helmet>
       {/* Red border accent (matching the brand image) */}
       <div className="absolute inset-0 border-[6px] border-[#E31E24] pointer-events-none" />
 

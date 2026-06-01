@@ -150,6 +150,14 @@ public static class KeyBuilder
     /// <summary>ImportJob GSI2SK: IMPORT#{status}</summary>
     public static string ImportJobGsi2Sk(string status) => $"IMPORT#{status}";
 
+    // ─── SMS Config ────────────────────────────────────────────────────────────
+
+    /// <summary>SMS Config PK: CONFIG</summary>
+    public static string SmsConfigPk() => "CONFIG";
+
+    /// <summary>SMS Config SK: SETTINGS#SMS</summary>
+    public static string SmsConfigSk() => "SETTINGS#SMS";
+
     // ─── Notification ───────────────────────────────────────────────────────────
 
     /// <summary>Notification PK: NOTIF#{customerId}</summary>

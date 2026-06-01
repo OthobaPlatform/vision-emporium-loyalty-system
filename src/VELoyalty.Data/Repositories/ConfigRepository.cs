@@ -199,6 +199,42 @@ public class ConfigRepository : DynamoDbRepository
         await PutItemAsync(item, cancellationToken: cancellationToken);
     }
 
+    // ─── SMS Config ────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Gets the SMS gateway configuration.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The SMS config, or null if not configured.</returns>
+    public async Task<SmsConfig?> GetSmsConfigAsync(CancellationToken cancellationToken = default)
+    {
+        var item = await GetItemAsync(
+            KeyBuilder.SmsConfigPk(),
+            KeyBuilder.SmsConfigSk(),
+            cancellationToken: cancellationToken);
+
+        return item is null ? null : MapToSmsConfig(item);
+    }
+
+    /// <summary>
+    /// Creates or updates the SMS gateway configuration.
+    /// </summary>
+    /// <param name="config">The SMS config to store.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public async Task PutSmsConfigAsync(SmsConfig config, CancellationToken cancellationToken = default)
+    {
+        var item = AttributeValueSerializer.NewItem(
+                KeyBuilder.SmsConfigPk(),
+                KeyBuilder.SmsConfigSk())
+            .WithBool("Enabled", config.Enabled)
+            .WithString("BaseUrl", config.BaseUrl)
+            .WithString("ApiKey", config.ApiKey)
+            .WithString("SenderId", config.SenderId)
+            .Build();
+
+        await PutItemAsync(item, cancellationToken: cancellationToken);
+    }
+
     // ─── Mapping Helpers ────────────────────────────────────────────────────────
 
     private static LoyaltyCycle MapToLoyaltyCycle(Dictionary<string, AttributeValue> item) =>
@@ -228,5 +264,13 @@ public class ConfigRepository : DynamoDbRepository
             CodeExpiryDays: AttributeValueSerializer.GetInt(item, "CodeExpiryDays"),
             MinPurchaseAmount: AttributeValueSerializer.GetDecimal(item, "MinPurchaseAmount"),
             ExcludedCategories: AttributeValueSerializer.GetStringList(item, "ExcludedCategories")
+        );
+
+    private static SmsConfig MapToSmsConfig(Dictionary<string, AttributeValue> item) =>
+        new(
+            Enabled: AttributeValueSerializer.GetBool(item, "Enabled"),
+            BaseUrl: AttributeValueSerializer.GetRequiredString(item, "BaseUrl"),
+            ApiKey: AttributeValueSerializer.GetRequiredString(item, "ApiKey"),
+            SenderId: AttributeValueSerializer.GetRequiredString(item, "SenderId")
         );
 }

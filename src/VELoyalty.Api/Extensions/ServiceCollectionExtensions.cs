@@ -48,6 +48,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<RedemptionRepository>();
         services.AddSingleton<RateLimitRepository>();
         services.AddSingleton<EligibilityRepository>();
+        services.AddSingleton<NotificationRepository>();
 
         return services;
     }

@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { Helmet } from 'react-helmet-async';
 import { apiClient, ApiError } from '../utils/api';
 import { useToast } from '../components/Toast';
 import { LoadingIndicator } from '../components/LoadingIndicator';
@@ -247,6 +248,10 @@ export function UsersPage() {
 
   return (
     <div>
+      <Helmet>
+        <title>Users | Vision Emporium Loyalty</title>
+      </Helmet>
+
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">User Management</h1>
         <button

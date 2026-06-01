@@ -1,9 +1,11 @@
 import { useState } from 'react';
+import { Helmet } from 'react-helmet-async';
 import { CycleConfigSection } from './configuration/CycleConfigSection';
 import { ThresholdsConfigSection } from './configuration/ThresholdsConfigSection';
 import { GeneralConfigSection } from './configuration/GeneralConfigSection';
+import { SmsConfigSection } from './configuration/SmsConfigSection';
 
-type ConfigTab = 'cycle' | 'thresholds' | 'general';
+type ConfigTab = 'cycle' | 'thresholds' | 'general' | 'sms';
 
 export function ConfigurationPage() {
   const [activeTab, setActiveTab] = useState<ConfigTab>('cycle');
@@ -12,10 +14,15 @@ export function ConfigurationPage() {
     { id: 'cycle', label: 'Loyalty Cycle' },
     { id: 'thresholds', label: 'Purchase Thresholds' },
     { id: 'general', label: 'General Settings' },
+    { id: 'sms', label: 'SMS Settings' },
   ];
 
   return (
     <div>
+      <Helmet>
+        <title>Configuration | Vision Emporium Loyalty</title>
+      </Helmet>
+
       <h1 className="text-2xl font-bold text-gray-900 mb-6">Configuration</h1>
 
       {/* Tab Navigation */}
@@ -44,6 +51,7 @@ export function ConfigurationPage() {
         {activeTab === 'cycle' && <CycleConfigSection />}
         {activeTab === 'thresholds' && <ThresholdsConfigSection />}
         {activeTab === 'general' && <GeneralConfigSection />}
+        {activeTab === 'sms' && <SmsConfigSection />}
       </div>
     </div>
   );

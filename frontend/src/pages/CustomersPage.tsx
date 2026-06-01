@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { Helmet } from 'react-helmet-async';
 import { apiClient, ApiError } from '../utils/api';
 import { DataTable, LoadingIndicator, useToast, type Column } from '../components';
 
@@ -160,6 +161,10 @@ export function CustomersPage() {
 
   return (
     <div>
+      <Helmet>
+        <title>Customers | Vision Emporium Loyalty</title>
+      </Helmet>
+
       <h1 className="text-2xl font-bold text-gray-900 mb-6">Customers</h1>
 
       {/* Search Box */}

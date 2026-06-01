@@ -17,21 +17,28 @@ public record Customer(
 );
 
 /// <summary>
-/// Represents a purchase transaction record.
+/// Represents a purchase transaction record (a single line item within a challan).
+/// Multiple items with the same ChallanNo constitute one purchase toward the threshold.
 /// </summary>
-/// <param name="CustomerId">Identifier of the purchasing customer.</param>
-/// <param name="OutletId">Identifier of the outlet where the purchase was made.</param>
+/// <param name="CustomerId">Identifier of the purchasing customer (phone number or staff ID).</param>
+/// <param name="OutletId">Identifier of the outlet (DIST_ID) where the purchase was made.</param>
 /// <param name="PurchaseDate">Date of the purchase.</param>
-/// <param name="Amount">Purchase amount in BDT (2 decimal places).</param>
-/// <param name="ProductCategory">Category of the purchased product.</param>
+/// <param name="Amount">Line item net amount in BDT (2 decimal places). Stored in actual BDT, not thousands.</param>
+/// <param name="ProductCategory">Item name/category of the purchased product.</param>
 /// <param name="ProcessedAt">UTC timestamp when the record was processed by the system.</param>
+/// <param name="ChallanNo">Challan number grouping line items into a single purchase transaction.</param>
+/// <param name="ItemId">Product/item identifier.</param>
+/// <param name="Quantity">Quantity purchased.</param>
 public record Purchase(
     string CustomerId,
     string OutletId,
     DateOnly PurchaseDate,
     decimal Amount,
     string ProductCategory,
-    DateTime ProcessedAt
+    DateTime ProcessedAt,
+    string ChallanNo,
+    string? ItemId = null,
+    int Quantity = 1
 );
 
 /// <summary>

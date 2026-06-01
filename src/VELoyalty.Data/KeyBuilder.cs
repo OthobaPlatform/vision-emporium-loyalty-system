@@ -24,15 +24,21 @@ public static class KeyBuilder
     /// <summary>Purchase PK: CUST#{customerId}</summary>
     public static string PurchasePk(string customerId) => $"CUST#{customerId}";
 
-    /// <summary>Purchase SK: PURCH#{date}#{outletId}#{amount}</summary>
-    public static string PurchaseSk(DateOnly date, string outletId, decimal amount) =>
-        $"PURCH#{date:yyyy-MM-dd}#{outletId}#{amount:F2}";
+    /// <summary>Purchase SK: PURCH#{challanNo}#{itemId} — unique per line item within a challan.</summary>
+    public static string PurchaseSk(string challanNo, string? itemId = null) =>
+        itemId != null ? $"PURCH#{challanNo}#{itemId}" : $"PURCH#{challanNo}";
 
     /// <summary>Purchase GSI1PK: OUTLET#{outletId}</summary>
     public static string PurchaseGsi1Pk(string outletId) => $"OUTLET#{outletId}";
 
     /// <summary>Purchase GSI1SK: PURCH#{date}</summary>
     public static string PurchaseGsi1Sk(DateOnly date) => $"PURCH#{date:yyyy-MM-dd}";
+
+    /// <summary>Purchase GSI2PK: CHALLAN#{challanNo} — for grouping line items into one purchase.</summary>
+    public static string PurchaseGsi2Pk(string challanNo) => $"CHALLAN#{challanNo}";
+
+    /// <summary>Purchase GSI2SK: ITEM#{itemId}</summary>
+    public static string PurchaseGsi2Sk(string itemId) => $"ITEM#{itemId}";
 
     // ─── Eligibility ────────────────────────────────────────────────────────────
 

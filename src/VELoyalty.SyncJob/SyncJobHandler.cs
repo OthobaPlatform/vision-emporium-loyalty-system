@@ -188,37 +188,39 @@ public sealed class SyncJobHandler
             var purchaseDate = ParseDate(record.PurchaseDate!);
             var purchaseAmount = decimal.Parse(record.PurchaseAmount!, NumberStyles.Number, CultureInfo.InvariantCulture);
 
-            // Step 3: In-batch deduplication using composite key
-            var compositeKey = BuildCompositeKey(record.CustomerId!, record.OutletId!, purchaseDate, purchaseAmount);
+            // Step 3: Generate synthetic challan number (external API doesn't provide CHALLAN_NO)
+            var syntheticChallanNo = $"API-{record.CustomerId!}-{record.OutletId!}-{purchaseDate:yyyyMMdd}-{purchaseAmount:F2}";
 
-            if (!seenKeys.Add(compositeKey))
+            // Step 4: In-batch deduplication using challan number
+            if (!seenKeys.Add(syntheticChallanNo))
             {
                 _logger.LogInformation(
-                    "Duplicate record skipped within batch: {CompositeKey}", compositeKey);
+                    "Duplicate record skipped within batch: {ChallanNo}", syntheticChallanNo);
                 skipped++;
                 continue;
             }
 
-            // Step 4: Check for existing record in DynamoDB (cross-batch deduplication)
-            var exists = await _purchaseRepository.ExistsAsync(
-                record.CustomerId!, record.OutletId!, purchaseDate, purchaseAmount, cancellationToken);
+            // Step 5: Check for existing record in DynamoDB (cross-batch deduplication)
+            var exists = await _purchaseRepository.ExistsByChallanAsync(
+                record.CustomerId!, syntheticChallanNo, null, cancellationToken);
 
             if (exists)
             {
                 _logger.LogInformation(
-                    "Duplicate record skipped (already in DB): {CompositeKey}", compositeKey);
+                    "Duplicate record skipped (already in DB): {ChallanNo}", syntheticChallanNo);
                 skipped++;
                 continue;
             }
 
-            // Step 5: Store the valid, non-duplicate record
+            // Step 6: Store the valid, non-duplicate record
             var purchase = new Purchase(
                 CustomerId: record.CustomerId!,
                 OutletId: record.OutletId!,
                 PurchaseDate: purchaseDate,
                 Amount: purchaseAmount,
                 ProductCategory: record.ProductCategory ?? "Unknown",
-                ProcessedAt: DateTime.UtcNow);
+                ProcessedAt: DateTime.UtcNow,
+                ChallanNo: syntheticChallanNo);
 
             var wasStored = await _purchaseRepository.StorePurchaseAsync(purchase, cancellationToken);
 

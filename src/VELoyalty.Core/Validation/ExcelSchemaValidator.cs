@@ -1,43 +1,71 @@
 using System.Globalization;
+using System.Text.RegularExpressions;
 
 namespace VELoyalty.Core.Validation;
 
 /// <summary>
-/// Validates Excel file schema: required column presence and type constraints per column.
+/// Validates Excel/CSV file schema for Vision Emporium sales data.
+/// Supports the real format with columns: DIST_ID, DIST_NAME, ITEM_ID, ITEM_NAME,
+/// OC_QTY, SR_QNTY, AMNT, CHALLAN_DATE, CHALLAN_NO, COMMP, NET_AMNT, NOTE.
 /// </summary>
 public static class ExcelSchemaValidator
 {
     /// <summary>
-    /// Required column names for the Excel import schema.
+    /// Required column names for the Vision Emporium CSV/Excel import schema.
     /// </summary>
     public static readonly IReadOnlyList<string> RequiredColumns = new[]
     {
-        "customer identifier",
-        "customer name",
-        "customer phone number",
-        "outlet identifier",
-        "purchase date",
-        "purchase amount",
-        "product category"
+        "DIST_ID",
+        "DIST_NAME",
+        "ITEM_ID",
+        "ITEM_NAME",
+        "OC_QTY",
+        "AMNT",
+        "CHALLAN_DATE",
+        "CHALLAN_NO",
+        "NET_AMNT",
+        "NOTE"
     };
+
+    /// <summary>
+    /// Regex to extract customer name from NOTE field.
+    /// Matches: "Name: {name} Mb No:" or "Credit Staff Id: {id} Name: {name}"
+    /// </summary>
+    private static readonly Regex NameRegex = new(
+        @"Name:\s*(.+?)\s*(?:Mb No:|$)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    /// <summary>
+    /// Regex to extract phone number from NOTE field.
+    /// Matches: "Mb No: 01xxxxxxxxx"
+    /// </summary>
+    private static readonly Regex PhoneRegex = new(
+        @"Mb No:\s*(0\d{10})",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    /// <summary>
+    /// Regex to extract staff ID from NOTE field.
+    /// Matches: "Credit Staff Id: {id}"
+    /// </summary>
+    private static readonly Regex StaffIdRegex = new(
+        @"Credit Staff Id:\s*(\d+)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     /// <summary>
     /// Validates that all required columns are present in the provided column headers.
     /// Column matching is case-insensitive.
     /// </summary>
-    /// <param name="columnHeaders">The column headers from the Excel file.</param>
-    /// <returns>A ValidationResult indicating success or failure with missing column details.</returns>
     public static ValidationResult ValidateColumns(IReadOnlyList<string> columnHeaders)
     {
         if (columnHeaders == null || columnHeaders.Count == 0)
             return ValidationResult.Failure("No columns found in the file.");
 
         var normalizedHeaders = columnHeaders
-            .Select(h => h.Trim().ToLowerInvariant())
+            .Select(h => h.Trim().ToUpperInvariant())
             .ToHashSet();
 
         var missingColumns = RequiredColumns
-            .Where(required => !normalizedHeaders.Contains(required))
+            .Where(required => !normalizedHeaders.Contains(required.ToUpperInvariant()))
             .ToList();
 
         if (missingColumns.Count > 0)
@@ -52,110 +80,161 @@ public static class ExcelSchemaValidator
     }
 
     /// <summary>
-    /// Validates a single row of data against the expected type constraints.
+    /// Validates a single row of data against the Vision Emporium schema constraints.
     /// </summary>
-    /// <param name="row">Dictionary mapping column name (lowercase) to cell value.</param>
-    /// <param name="rowNumber">1-based row number for error reporting.</param>
-    /// <returns>A ValidationResult indicating success or failure with specific type constraint violations.</returns>
     public static ValidationResult ValidateRow(IReadOnlyDictionary<string, string?> row, int rowNumber)
     {
         var errors = new List<string>();
 
-        // Customer identifier: non-empty string
-        ValidateNonEmpty(row, "customer identifier", rowNumber, errors);
+        // DIST_ID: required numeric
+        var distId = GetValue(row, "DIST_ID");
+        if (string.IsNullOrWhiteSpace(distId))
+            errors.Add($"Row {rowNumber}: DIST_ID (outlet identifier) is required.");
 
-        // Customer name: non-empty string, max 200 characters
-        var customerName = GetValue(row, "customer name");
-        if (string.IsNullOrWhiteSpace(customerName))
-        {
-            errors.Add($"Row {rowNumber}: Customer name is required.");
-        }
-        else if (customerName.Length > Constants.MaxCustomerNameLength)
-        {
-            errors.Add($"Row {rowNumber}: Customer name must not exceed {Constants.MaxCustomerNameLength} characters.");
-        }
+        // ITEM_ID: required
+        var itemId = GetValue(row, "ITEM_ID");
+        if (string.IsNullOrWhiteSpace(itemId))
+            errors.Add($"Row {rowNumber}: ITEM_ID is required.");
 
-        // Customer phone number: Valid_Phone_Number format
-        var phone = GetValue(row, "customer phone number");
-        if (string.IsNullOrWhiteSpace(phone))
-        {
-            errors.Add($"Row {rowNumber}: Customer phone number is required.");
-        }
-        else
-        {
-            var phoneResult = PhoneNumberValidator.Validate(phone);
-            if (!phoneResult.IsValid)
-            {
-                errors.Add($"Row {rowNumber}: Customer phone number is invalid - {phoneResult.Errors[0]}");
-            }
-        }
+        // ITEM_NAME: required
+        var itemName = GetValue(row, "ITEM_NAME");
+        if (string.IsNullOrWhiteSpace(itemName))
+            errors.Add($"Row {rowNumber}: ITEM_NAME is required.");
 
-        // Outlet identifier: non-empty string
-        ValidateNonEmpty(row, "outlet identifier", rowNumber, errors);
-
-        // Purchase date: ISO 8601 date format, not in the future
-        var dateStr = GetValue(row, "purchase date");
+        // CHALLAN_DATE: required, parseable date (dd/MM/yyyy or dd/MM/yyyy hh:mm:ss tt)
+        var dateStr = GetValue(row, "CHALLAN_DATE");
         if (string.IsNullOrWhiteSpace(dateStr))
         {
-            errors.Add($"Row {rowNumber}: Purchase date is required.");
+            errors.Add($"Row {rowNumber}: CHALLAN_DATE is required.");
         }
-        else if (!DateOnly.TryParse(dateStr, CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsedDate)
-              && !DateTime.TryParse(dateStr, CultureInfo.InvariantCulture, DateTimeStyles.None, out _))
+        else if (!TryParseChallanDate(dateStr, out _))
         {
-            errors.Add($"Row {rowNumber}: Purchase date '{dateStr}' is not a valid date format.");
+            errors.Add($"Row {rowNumber}: CHALLAN_DATE '{dateStr}' is not a valid date format (expected dd/MM/yyyy).");
+        }
+
+        // CHALLAN_NO: required
+        var challanNo = GetValue(row, "CHALLAN_NO");
+        if (string.IsNullOrWhiteSpace(challanNo))
+            errors.Add($"Row {rowNumber}: CHALLAN_NO is required.");
+
+        // NET_AMNT: required numeric (can be 0 for freebies)
+        var netAmntStr = GetValue(row, "NET_AMNT");
+        if (string.IsNullOrWhiteSpace(netAmntStr))
+        {
+            errors.Add($"Row {rowNumber}: NET_AMNT is required.");
+        }
+        else if (!decimal.TryParse(netAmntStr, NumberStyles.Number, CultureInfo.InvariantCulture, out var netAmnt))
+        {
+            errors.Add($"Row {rowNumber}: NET_AMNT '{netAmntStr}' is not a valid numeric value.");
+        }
+        else if (netAmnt < 0)
+        {
+            errors.Add($"Row {rowNumber}: NET_AMNT cannot be negative.");
+        }
+
+        // NOTE: must contain either a phone number or staff ID for customer identification
+        var note = GetValue(row, "NOTE");
+        if (string.IsNullOrWhiteSpace(note))
+        {
+            errors.Add($"Row {rowNumber}: NOTE is required (must contain customer phone or staff ID).");
         }
         else
         {
-            // Check if date is in the future (using system timezone)
-            var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, Constants.SystemTimeZone));
-            if (DateOnly.TryParse(dateStr, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dateOnly) && dateOnly > today)
+            var phone = ExtractPhoneNumber(note);
+            var staffId = ExtractStaffId(note);
+            if (string.IsNullOrWhiteSpace(phone) && string.IsNullOrWhiteSpace(staffId))
             {
-                errors.Add($"Row {rowNumber}: Purchase date cannot be in the future.");
+                errors.Add($"Row {rowNumber}: NOTE must contain a phone number (Mb No:) or staff ID (Credit Staff Id:).");
             }
         }
-
-        // Purchase amount: numeric value between 0.01 and 999,999,999.99
-        var amountStr = GetValue(row, "purchase amount");
-        if (string.IsNullOrWhiteSpace(amountStr))
-        {
-            errors.Add($"Row {rowNumber}: Purchase amount is required.");
-        }
-        else if (!decimal.TryParse(amountStr, NumberStyles.Number, CultureInfo.InvariantCulture, out var amount))
-        {
-            errors.Add($"Row {rowNumber}: Purchase amount '{amountStr}' is not a valid numeric value.");
-        }
-        else
-        {
-            if (amount < Constants.MinPurchaseAmount)
-                errors.Add($"Row {rowNumber}: Purchase amount must be at least {Constants.MinPurchaseAmount}.");
-            if (amount > Constants.MaxPurchaseAmount)
-                errors.Add($"Row {rowNumber}: Purchase amount must not exceed {Constants.MaxPurchaseAmount}.");
-        }
-
-        // Product category: non-empty string
-        ValidateNonEmpty(row, "product category", rowNumber, errors);
 
         return errors.Count == 0
             ? ValidationResult.Success()
             : ValidationResult.Failure(errors);
     }
 
-    private static void ValidateNonEmpty(
-        IReadOnlyDictionary<string, string?> row,
-        string columnName,
-        int rowNumber,
-        List<string> errors)
+    /// <summary>
+    /// Extracts customer phone number from the NOTE field and normalizes to E.164 (+880).
+    /// </summary>
+    public static string? ExtractPhoneNumber(string? note)
     {
-        var value = GetValue(row, columnName);
-        if (string.IsNullOrWhiteSpace(value))
+        if (string.IsNullOrWhiteSpace(note)) return null;
+
+        var match = PhoneRegex.Match(note);
+        if (!match.Success) return null;
+
+        var localNumber = match.Groups[1].Value.Trim();
+        if (string.IsNullOrWhiteSpace(localNumber)) return null;
+
+        // Normalize: 01xxxxxxxxx → +8801xxxxxxxxx
+        return $"+88{localNumber}";
+    }
+
+    /// <summary>
+    /// Extracts customer name from the NOTE field.
+    /// </summary>
+    public static string? ExtractCustomerName(string? note)
+    {
+        if (string.IsNullOrWhiteSpace(note)) return null;
+
+        var match = NameRegex.Match(note);
+        if (!match.Success) return null;
+
+        var name = match.Groups[1].Value.Trim();
+        return string.IsNullOrWhiteSpace(name) ? null : name;
+    }
+
+    /// <summary>
+    /// Extracts staff ID from the NOTE field (for credit/staff purchases).
+    /// </summary>
+    public static string? ExtractStaffId(string? note)
+    {
+        if (string.IsNullOrWhiteSpace(note)) return null;
+
+        var match = StaffIdRegex.Match(note);
+        return match.Success ? match.Groups[1].Value.Trim() : null;
+    }
+
+    /// <summary>
+    /// Converts amount from thousands BDT (as in CSV) to actual BDT.
+    /// E.g., 0.2650 → 265.0, 56.20 → 56200.0
+    /// </summary>
+    public static decimal ConvertFromThousands(decimal amountInThousands)
+    {
+        return amountInThousands * 1000m;
+    }
+
+    /// <summary>
+    /// Tries to parse the CHALLAN_DATE field (format: dd/MM/yyyy or dd/MM/yyyy hh:mm:ss tt).
+    /// </summary>
+    public static bool TryParseChallanDate(string dateStr, out DateOnly result)
+    {
+        result = default;
+
+        // Try dd/MM/yyyy HH:mm:ss tt
+        if (DateTime.TryParseExact(dateStr.Trim(), 
+            new[] { "dd/MM/yyyy hh:mm:ss tt", "dd/MM/yyyy HH:mm:ss", "dd/MM/yyyy", "d/M/yyyy hh:mm:ss tt", "d/M/yyyy" },
+            CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt))
         {
-            var displayName = char.ToUpper(columnName[0]) + columnName[1..];
-            errors.Add($"Row {rowNumber}: {displayName} is required.");
+            result = DateOnly.FromDateTime(dt);
+            return true;
         }
+
+        // Fallback: try general DateTime parsing
+        if (DateTime.TryParse(dateStr.Trim(), CultureInfo.InvariantCulture, DateTimeStyles.None, out var dtFallback))
+        {
+            result = DateOnly.FromDateTime(dtFallback);
+            return true;
+        }
+
+        return false;
     }
 
     private static string? GetValue(IReadOnlyDictionary<string, string?> row, string columnName)
     {
-        return row.TryGetValue(columnName, out var value) ? value : null;
+        // Try exact match first, then case-insensitive
+        if (row.TryGetValue(columnName, out var value)) return value;
+        var key = row.Keys.FirstOrDefault(k => k.Equals(columnName, StringComparison.OrdinalIgnoreCase));
+        return key != null ? row[key] : null;
     }
 }

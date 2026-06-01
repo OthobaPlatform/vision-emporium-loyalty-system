@@ -5,8 +5,11 @@ namespace VELoyalty.Data.Repositories;
 
 /// <summary>
 /// Repository for managing Purchase records in DynamoDB.
-/// Supports storing purchases, querying by customer+cycle, checking duplicates,
-/// and calculating qualifying purchase counts with filtering.
+/// Supports storing individual line items, grouping by CHALLAN_NO for purchase counting,
+/// checking duplicates, and calculating qualifying purchase counts.
+///
+/// Key design: Each line item is stored individually (PK=CUST#{customerId}, SK=PURCH#{challanNo}#{itemId}).
+/// Purchase count toward thresholds is based on unique CHALLAN_NO values (1 challan = 1 purchase).
 /// </summary>
 public class PurchaseRepository : DynamoDbRepository
 {
@@ -15,19 +18,18 @@ public class PurchaseRepository : DynamoDbRepository
     }
 
     /// <summary>
-    /// Stores a purchase record in DynamoDB.
-    /// The SK (PURCH#{date}#{outletId}#{amount}) serves as the composite deduplication key.
-    /// Uses a condition expression to prevent overwriting existing records (deduplication).
+    /// Stores a purchase line item in DynamoDB.
+    /// Uses CHALLAN_NO + ITEM_ID as the deduplication key.
     /// </summary>
-    /// <param name="purchase">The purchase record to store.</param>
+    /// <param name="purchase">The purchase line item to store.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>True if the purchase was stored successfully; false if it already exists (duplicate).</returns>
+    /// <returns>True if stored successfully; false if duplicate.</returns>
     public async Task<bool> StorePurchaseAsync(Purchase purchase, CancellationToken cancellationToken = default)
     {
         var pk = KeyBuilder.PurchasePk(purchase.CustomerId);
-        var sk = KeyBuilder.PurchaseSk(purchase.PurchaseDate, purchase.OutletId, purchase.Amount);
+        var sk = KeyBuilder.PurchaseSk(purchase.ChallanNo, purchase.ItemId);
 
-        var item = AttributeValueSerializer.NewItem(pk, sk)
+        var itemBuilder = AttributeValueSerializer.NewItem(pk, sk)
             .WithGsi1(
                 KeyBuilder.PurchaseGsi1Pk(purchase.OutletId),
                 KeyBuilder.PurchaseGsi1Sk(purchase.PurchaseDate))
@@ -37,7 +39,19 @@ public class PurchaseRepository : DynamoDbRepository
             .WithDecimal("Amount", purchase.Amount)
             .WithString("ProductCategory", purchase.ProductCategory)
             .WithDateTime("ProcessedAt", purchase.ProcessedAt)
-            .Build();
+            .WithString("ChallanNo", purchase.ChallanNo);
+
+        if (purchase.ItemId != null)
+            itemBuilder.WithString("ItemId", purchase.ItemId);
+        if (purchase.Quantity != 1)
+            itemBuilder.WithInt("Quantity", purchase.Quantity);
+
+        // Add GSI2 for challan-based lookups
+        itemBuilder.WithGsi2(
+            KeyBuilder.PurchaseGsi2Pk(purchase.ChallanNo),
+            KeyBuilder.PurchaseGsi2Sk(purchase.ItemId ?? "UNKNOWN"));
+
+        var item = itemBuilder.Build();
 
         try
         {
@@ -49,61 +63,39 @@ public class PurchaseRepository : DynamoDbRepository
         }
         catch (ConditionalCheckFailedException)
         {
-            // Item already exists — this is a duplicate
             return false;
         }
     }
 
     /// <summary>
-    /// Checks whether a purchase with the same composite key already exists (deduplication check).
-    /// The composite key is: customerId + outletId + purchaseDate + amount.
+    /// Checks whether a purchase line item with the same challan+item already exists.
     /// </summary>
-    /// <param name="customerId">Customer identifier.</param>
-    /// <param name="outletId">Outlet identifier.</param>
-    /// <param name="purchaseDate">Date of the purchase.</param>
-    /// <param name="amount">Purchase amount.</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>True if a duplicate exists; false otherwise.</returns>
-    public async Task<bool> ExistsAsync(
+    public async Task<bool> ExistsByChallanAsync(
         string customerId,
-        string outletId,
-        DateOnly purchaseDate,
-        decimal amount,
+        string challanNo,
+        string? itemId = null,
         CancellationToken cancellationToken = default)
     {
         var pk = KeyBuilder.PurchasePk(customerId);
-        var sk = KeyBuilder.PurchaseSk(purchaseDate, outletId, amount);
+        var sk = KeyBuilder.PurchaseSk(challanNo, itemId);
 
         var item = await GetItemAsync(pk, sk, cancellationToken: cancellationToken);
         return item is not null;
     }
 
     /// <summary>
-    /// Queries all purchases for a customer within a given date range (representing a loyalty cycle).
+    /// Queries all purchase line items for a customer with SK prefix "PURCH#".
     /// </summary>
-    /// <param name="customerId">Customer identifier.</param>
-    /// <param name="cycleStartDate">Cycle start date (inclusive).</param>
-    /// <param name="cycleEndDate">Cycle end date (inclusive).</param>
-    /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>List of purchases within the cycle period.</returns>
-    public async Task<List<Purchase>> GetByCustomerAndCycleAsync(
+    public async Task<List<Purchase>> GetByCustomerAsync(
         string customerId,
-        DateOnly cycleStartDate,
-        DateOnly cycleEndDate,
         CancellationToken cancellationToken = default)
     {
-        // SK pattern: PURCH#{date}#{outletId}#{amount}
-        // We query with begins_with for the PURCH# prefix and filter by date range
-        var skStart = $"PURCH#{cycleStartDate:yyyy-MM-dd}";
-        var skEnd = $"PURCH#{cycleEndDate:yyyy-MM-dd}~"; // ~ is after all valid chars to include the end date
-
         var results = await QueryAsync(
-            keyConditionExpression: "PK = :pk AND SK BETWEEN :skStart AND :skEnd",
+            keyConditionExpression: "PK = :pk AND begins_with(SK, :skPrefix)",
             expressionAttributeValues: new Dictionary<string, AttributeValue>
             {
                 [":pk"] = AttributeValueSerializer.ToS(KeyBuilder.PurchasePk(customerId)),
-                [":skStart"] = AttributeValueSerializer.ToS(skStart),
-                [":skEnd"] = AttributeValueSerializer.ToS(skEnd)
+                [":skPrefix"] = AttributeValueSerializer.ToS("PURCH#")
             },
             cancellationToken: cancellationToken);
 
@@ -111,16 +103,34 @@ public class PurchaseRepository : DynamoDbRepository
     }
 
     /// <summary>
-    /// Calculates the number of qualifying purchases for a customer within a cycle,
-    /// filtering by minimum purchase amount and excluded product categories.
+    /// Queries all purchases for a customer within a given date range (representing a loyalty cycle).
+    /// Filters by PurchaseDate attribute after query.
+    /// </summary>
+    public async Task<List<Purchase>> GetByCustomerAndCycleAsync(
+        string customerId,
+        DateOnly cycleStartDate,
+        DateOnly cycleEndDate,
+        CancellationToken cancellationToken = default)
+    {
+        var allPurchases = await GetByCustomerAsync(customerId, cancellationToken);
+
+        return allPurchases
+            .Where(p => p.PurchaseDate >= cycleStartDate && p.PurchaseDate <= cycleEndDate)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Calculates the number of qualifying purchases (unique challans) for a customer within a cycle.
+    /// Groups line items by CHALLAN_NO — each unique challan counts as 1 purchase.
+    /// The total challan amount (sum of line items) must meet the minimum purchase amount.
     /// </summary>
     /// <param name="customerId">Customer identifier.</param>
     /// <param name="cycleStartDate">Cycle start date (inclusive).</param>
     /// <param name="cycleEndDate">Cycle end date (inclusive).</param>
-    /// <param name="minPurchaseAmount">Minimum purchase amount to qualify.</param>
-    /// <param name="excludedCategories">Product categories that do not count toward thresholds.</param>
+    /// <param name="minPurchaseAmount">Minimum total challan amount to qualify (in BDT).</param>
+    /// <param name="excludedCategories">Product categories excluded (if ALL items in a challan are excluded, it doesn't count).</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    /// <returns>The count of qualifying purchases.</returns>
+    /// <returns>The count of qualifying purchases (unique challans meeting criteria).</returns>
     public async Task<int> GetQualifyingPurchaseCountAsync(
         string customerId,
         DateOnly cycleStartDate,
@@ -136,21 +146,29 @@ public class PurchaseRepository : DynamoDbRepository
     }
 
     /// <summary>
-    /// Counts qualifying purchases from a list, applying the minimum amount and excluded category filters.
-    /// A purchase qualifies if its amount >= minPurchaseAmount AND its category is NOT in the excluded list.
+    /// Counts qualifying purchases from a list by grouping on CHALLAN_NO.
+    /// A challan qualifies if its total amount (sum of all line items) >= minPurchaseAmount
+    /// AND at least one item in the challan is NOT in the excluded categories.
     /// </summary>
-    /// <param name="purchases">List of purchases to evaluate.</param>
-    /// <param name="minPurchaseAmount">Minimum purchase amount to qualify.</param>
-    /// <param name="excludedCategories">Product categories that do not count toward thresholds.</param>
-    /// <returns>The count of qualifying purchases.</returns>
     public static int CountQualifyingPurchases(
         List<Purchase> purchases,
         decimal minPurchaseAmount,
         List<string> excludedCategories)
     {
-        return purchases.Count(p =>
-            p.Amount >= minPurchaseAmount &&
-            !excludedCategories.Contains(p.ProductCategory, StringComparer.OrdinalIgnoreCase));
+        // Group by ChallanNo — each group is one purchase
+        var challanGroups = purchases.GroupBy(p => p.ChallanNo);
+
+        return challanGroups.Count(group =>
+        {
+            // Total amount for the challan (sum of all line items)
+            var totalAmount = group.Sum(p => p.Amount);
+
+            // At least one item must NOT be in excluded categories
+            var hasNonExcludedItem = group.Any(p =>
+                !excludedCategories.Contains(p.ProductCategory, StringComparer.OrdinalIgnoreCase));
+
+            return totalAmount >= minPurchaseAmount && hasNonExcludedItem;
+        });
     }
 
     private static Purchase MapToPurchase(Dictionary<string, AttributeValue> item)
@@ -161,7 +179,10 @@ public class PurchaseRepository : DynamoDbRepository
             PurchaseDate: AttributeValueSerializer.GetDateOnly(item, "PurchaseDate"),
             Amount: AttributeValueSerializer.GetDecimal(item, "Amount"),
             ProductCategory: AttributeValueSerializer.GetRequiredString(item, "ProductCategory"),
-            ProcessedAt: AttributeValueSerializer.GetDateTime(item, "ProcessedAt")
+            ProcessedAt: AttributeValueSerializer.GetDateTime(item, "ProcessedAt"),
+            ChallanNo: AttributeValueSerializer.GetRequiredString(item, "ChallanNo"),
+            ItemId: AttributeValueSerializer.GetString(item, "ItemId"),
+            Quantity: item.ContainsKey("Quantity") ? AttributeValueSerializer.GetInt(item, "Quantity") : 1
         );
     }
 }

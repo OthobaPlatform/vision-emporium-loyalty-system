@@ -41,9 +41,15 @@ public class KeyBuilderTests
     [Fact]
     public void PurchaseSk_ReturnsCorrectCompositeFormat()
     {
-        var date = new DateOnly(2024, 6, 15);
-        var result = KeyBuilder.PurchaseSk(date, "OUT01", 1500.50m);
-        Assert.Equal("PURCH#2024-06-15#OUT01#1500.50", result);
+        var result = KeyBuilder.PurchaseSk("CHN-001", "ITEM-01");
+        Assert.Equal("PURCH#CHN-001#ITEM-01", result);
+    }
+
+    [Fact]
+    public void PurchaseSk_WithoutItemId_ReturnsFormatWithoutItem()
+    {
+        var result = KeyBuilder.PurchaseSk("CHN-001", null);
+        Assert.Equal("PURCH#CHN-001", result);
     }
 
     [Fact]

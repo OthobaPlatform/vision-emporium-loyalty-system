@@ -195,6 +195,8 @@ public class Function
             var dateStr = rowData["purchase date"]!.Trim();
             var amountStr = rowData["purchase amount"]!.Trim();
             var category = rowData["product category"]!.Trim();
+            var challanNo = rowData["challan_no"]?.Trim() ?? rowData["challan no"]?.Trim() ?? "";
+            var itemId = rowData["item_id"]?.Trim() ?? rowData["item id"]?.Trim();
 
             // Parse date and amount (already validated by ExcelSchemaValidator)
             var purchaseDate = ParseDate(dateStr);
@@ -203,9 +205,15 @@ public class Function
             // Normalize phone number
             var normalizedPhone = PhoneNumberValidator.Normalize(phoneRaw);
 
-            // Deduplication check: composite key = customerId + outletId + purchaseDate + amount
-            var isDuplicate = await _purchaseRepository.ExistsAsync(
-                customerId, outletId, purchaseDate, amount);
+            // Generate synthetic challan if not provided
+            if (string.IsNullOrWhiteSpace(challanNo))
+            {
+                challanNo = $"IMPORT-{customerId}-{outletId}-{purchaseDate:yyyyMMdd}-{amount:F2}";
+            }
+
+            // Deduplication check: challan + item
+            var isDuplicate = await _purchaseRepository.ExistsByChallanAsync(
+                customerId, challanNo, itemId);
 
             if (isDuplicate)
             {
@@ -220,7 +228,9 @@ public class Function
                 PurchaseDate: purchaseDate,
                 Amount: amount,
                 ProductCategory: category,
-                ProcessedAt: DateTime.UtcNow
+                ProcessedAt: DateTime.UtcNow,
+                ChallanNo: challanNo,
+                ItemId: itemId
             );
 
             var stored = await _purchaseRepository.StorePurchaseAsync(purchase);

@@ -30,6 +30,47 @@ public static class Constants
         TimeZoneInfo.FindSystemTimeZoneById(SystemTimeZoneId);
 
     /// <summary>
+    /// The loyalty cycle always runs from June 1 to May 31 of the next year.
+    /// This method computes the current cycle ID based on today's date.
+    /// E.g., if today is between June 1, 2025 and May 31, 2026 → "2025-2026"
+    /// </summary>
+    public static string GetCurrentCycleId()
+    {
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, SystemTimeZone));
+        return GetCycleIdForDate(today);
+    }
+
+    /// <summary>
+    /// Gets the cycle ID for a given date.
+    /// Cycle runs June 1 → May 31. If date is Jan-May, it belongs to the previous year's cycle.
+    /// </summary>
+    public static string GetCycleIdForDate(DateOnly date)
+    {
+        var cycleStartYear = date.Month >= 6 ? date.Year : date.Year - 1;
+        return $"{cycleStartYear}-{cycleStartYear + 1}";
+    }
+
+    /// <summary>
+    /// Gets the start date of the current loyalty cycle (June 1).
+    /// </summary>
+    public static DateOnly GetCurrentCycleStartDate()
+    {
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, SystemTimeZone));
+        var startYear = today.Month >= 6 ? today.Year : today.Year - 1;
+        return new DateOnly(startYear, 6, 1);
+    }
+
+    /// <summary>
+    /// Gets the end date of the current loyalty cycle (May 31).
+    /// </summary>
+    public static DateOnly GetCurrentCycleEndDate()
+    {
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, SystemTimeZone));
+        var endYear = today.Month >= 6 ? today.Year + 1 : today.Year;
+        return new DateOnly(endYear, 5, 31);
+    }
+
+    /// <summary>
     /// Minimum purchase amount allowed (BDT).
     /// </summary>
     public const decimal MinPurchaseAmount = 0.01m;

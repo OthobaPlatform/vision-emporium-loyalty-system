@@ -10,16 +10,23 @@ public static class ConfigurationEndpoints
 {
     public static RouteGroupBuilder MapConfigurationEndpoints(this RouteGroupBuilder group)
     {
-        // GET /config/cycle
-        group.MapGet("/config/cycle", async (
-            ConfigurationService configService,
-            CancellationToken cancellationToken) =>
+        // GET /config/cycle — always returns the auto-computed cycle (June 1 → May 31)
+        group.MapGet("/config/cycle", (CancellationToken cancellationToken) =>
         {
-            var cycle = await configService.GetCycleConfigAsync(cancellationToken);
-            if (cycle is null)
-                return Results.NotFound(new { error = "NotFound", message = "No active loyalty cycle configured." });
+            var cycleId = VELoyalty.Core.Constants.GetCurrentCycleId();
+            var startDate = VELoyalty.Core.Constants.GetCurrentCycleStartDate();
+            var endDate = VELoyalty.Core.Constants.GetCurrentCycleEndDate();
+            var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, VELoyalty.Core.Constants.SystemTimeZone));
+            var daysRemaining = endDate.DayNumber - today.DayNumber;
+            if (daysRemaining < 0) daysRemaining = 0;
 
-            return Results.Ok(cycle);
+            return Results.Ok(new CycleConfigResponse(
+                CycleId: cycleId,
+                StartDate: startDate,
+                EndDate: endDate,
+                IsActive: true,
+                DaysRemaining: daysRemaining
+            ));
         }).RequireAdmin().MapToApiVersion(1, 0);
 
         // PUT /config/cycle

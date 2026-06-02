@@ -65,7 +65,7 @@ public class EligibilityService
         CancellationToken ct = default)
     {
         var results = new List<EligibilityResult>();
-        var cycleId = "2025-2026"; // Current active cycle
+        var cycleId = VELoyalty.Core.Constants.GetCurrentCycleId();
 
         // Get all configured thresholds
         var thresholds = await _configRepository.GetAllThresholdConfigsAsync(ct);

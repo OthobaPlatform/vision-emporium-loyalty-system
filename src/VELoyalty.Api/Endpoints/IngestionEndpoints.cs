@@ -162,7 +162,7 @@ public static class IngestionEndpoints
             }
 
             // Upsert customer profiles with purchase counts
-            var cycleId = "2025-2026"; // Current active cycle
+            var cycleId = VELoyalty.Core.Constants.GetCurrentCycleId();
             foreach (var (custId, info) in customerProfiles)
             {
                 var customer = new Customer(

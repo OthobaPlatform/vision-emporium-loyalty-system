@@ -34,24 +34,24 @@ public class DashboardService
     /// <returns>Dashboard summary response.</returns>
     public async Task<DashboardSummaryResponse> GetDashboardSummaryAsync(CancellationToken cancellationToken = default)
     {
-        var activeCycle = await _cycleRepository.GetActiveCycleAsync(cancellationToken);
+        // Loyalty cycle is automatic: June 1 → May 31
+        var cycleId = VELoyalty.Core.Constants.GetCurrentCycleId();
+        var cycleStart = VELoyalty.Core.Constants.GetCurrentCycleStartDate();
+        var cycleEnd = VELoyalty.Core.Constants.GetCurrentCycleEndDate();
+        var today = DateOnly.FromDateTime(TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, VELoyalty.Core.Constants.SystemTimeZone));
+        var daysRemaining = cycleEnd.DayNumber - today.DayNumber;
+        if (daysRemaining < 0) daysRemaining = 0;
 
-        // Get cycle status
-        CycleStatusResponse? cycleStatus = null;
-        if (activeCycle is not null)
-        {
-            var today = DateOnly.FromDateTime(DateTime.UtcNow);
-            var daysRemaining = activeCycle.EndDate.DayNumber - today.DayNumber;
-            if (daysRemaining < 0) daysRemaining = 0;
+        var cycleStatus = new CycleStatusResponse(
+            CycleId: cycleId,
+            StartDate: cycleStart,
+            EndDate: cycleEnd,
+            DaysRemaining: daysRemaining,
+            IsActive: true
+        );
 
-            cycleStatus = new CycleStatusResponse(
-                CycleId: activeCycle.CycleId,
-                StartDate: activeCycle.StartDate,
-                EndDate: activeCycle.EndDate,
-                DaysRemaining: daysRemaining,
-                IsActive: activeCycle.IsActive
-            );
-        }
+        // Create a virtual LoyaltyCycle for active customer count lookup
+        var activeCycle = new LoyaltyCycle(cycleId, cycleStart, cycleEnd, true);
 
         // Get recent sync status (last sync job)
         var recentSyncJobs = await _syncJobRepository.ListRecentAsync(limit: 1, cancellationToken: cancellationToken);

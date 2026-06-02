@@ -179,6 +179,56 @@ public class VerificationCodeRepository : DynamoDbRepository
     }
 
     /// <summary>
+    /// Lists all verification codes (eligibility records) from the table.
+    /// Uses a scan with filter for MVP. Optionally filters by status.
+    /// </summary>
+    /// <param name="status">Optional status filter (Active, Redeemed, Expired).</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>List of all verification codes.</returns>
+    public async Task<List<VerificationCode>> ListAllCodesAsync(
+        string? status = null,
+        CancellationToken cancellationToken = default)
+    {
+        var results = new List<Dictionary<string, AttributeValue>>();
+        Dictionary<string, AttributeValue>? lastEvaluatedKey = null;
+
+        do
+        {
+            var request = new Amazon.DynamoDBv2.Model.ScanRequest
+            {
+                TableName = Context.Table,
+                FilterExpression = "begins_with(SK, :eligPrefix)",
+                ExpressionAttributeValues = new Dictionary<string, AttributeValue>
+                {
+                    [":eligPrefix"] = AttributeValueSerializer.ToS("ELIG#")
+                }
+            };
+
+            if (!string.IsNullOrWhiteSpace(status))
+            {
+                request.FilterExpression += " AND #status = :status";
+                request.ExpressionAttributeValues[":status"] = AttributeValueSerializer.ToS(status);
+                request.ExpressionAttributeNames = new Dictionary<string, string>
+                {
+                    ["#status"] = "Status"
+                };
+            }
+
+            if (lastEvaluatedKey is not null)
+                request.ExclusiveStartKey = lastEvaluatedKey;
+
+            var response = await Context.Client.ScanAsync(request, cancellationToken);
+            results.AddRange(response.Items);
+            lastEvaluatedKey = response.LastEvaluatedKey is { Count: > 0 }
+                ? response.LastEvaluatedKey
+                : null;
+
+        } while (lastEvaluatedKey is not null);
+
+        return results.Select(MapToVerificationCode).ToList();
+    }
+
+    /// <summary>
     /// Counts active (non-redeemed, non-expired) verification codes.
     /// Uses a scan with filter for MVP. In production, maintain a counter.
     /// </summary>

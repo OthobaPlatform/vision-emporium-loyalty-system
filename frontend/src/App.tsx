@@ -14,6 +14,7 @@ import { UsersPage } from './pages/UsersPage';
 import { ImportPage } from './pages/ImportPage';
 import { SyncStatusPage } from './pages/SyncStatusPage';
 import { NotificationsPage } from './pages/NotificationsPage';
+import { VerificationCodesPage } from './pages/VerificationCodesPage';
 
 function App() {
   return (
@@ -49,6 +50,15 @@ function App() {
                   element={
                     <ProtectedRoute allowedRoles={['Admin', 'Outlet_Manager']}>
                       <RedemptionsPage />
+                    </ProtectedRoute>
+                  }
+                />
+
+                <Route
+                  path="/verification-codes"
+                  element={
+                    <ProtectedRoute allowedRoles={['Admin']}>
+                      <VerificationCodesPage />
                     </ProtectedRoute>
                   }
                 />

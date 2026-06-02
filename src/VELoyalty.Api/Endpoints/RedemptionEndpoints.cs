@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 using Asp.Versioning;
 using VELoyalty.Api.Services;
 using VELoyalty.Auth;
+using VELoyalty.Data.Repositories;
 
 namespace VELoyalty.Api.Endpoints;
 
@@ -9,6 +10,55 @@ public static class RedemptionEndpoints
 {
     public static RouteGroupBuilder MapRedemptionEndpoints(this RouteGroupBuilder group)
     {
+        // GET /verification-codes
+        group.MapGet("/verification-codes", async (
+            string? status,
+            VerificationCodeRepository verificationCodeRepository,
+            CustomerRepository customerRepository,
+            OutletRepository outletRepository,
+            CancellationToken cancellationToken) =>
+        {
+            // Validate status filter if provided
+            if (!string.IsNullOrWhiteSpace(status) &&
+                status != "Active" && status != "Redeemed" && status != "Expired")
+            {
+                return Results.BadRequest(new { error = "ValidationError", message = "Status must be 'Active', 'Redeemed', or 'Expired'." });
+            }
+
+            var codes = await verificationCodeRepository.ListAllCodesAsync(status, cancellationToken);
+
+            // Enrich codes with customer phone and outlet name
+            var results = new List<object>();
+            foreach (var code in codes)
+            {
+                var customer = await customerRepository.GetByIdAsync(code.CustomerId, cancellationToken);
+                var outlet = await outletRepository.GetByIdAsync(code.OutletId, cancellationToken);
+
+                // Determine effective status (Active codes past expiry are Expired)
+                var effectiveStatus = code.Status;
+                if (code.Status == "Active" && DateTime.UtcNow > code.ExpiresAt)
+                    effectiveStatus = "Expired";
+
+                results.Add(new
+                {
+                    code = code.Code,
+                    customerId = code.CustomerId,
+                    customerPhone = customer?.PhoneNumber ?? "Unknown",
+                    outletId = code.OutletId,
+                    outletName = outlet?.Name ?? code.OutletId,
+                    tier = code.Tier,
+                    giftType = code.GiftType,
+                    giftDescription = code.GiftDescription,
+                    giftValue = code.GiftValue,
+                    status = effectiveStatus,
+                    issuedAt = code.IssuedAt,
+                    expiresAt = code.ExpiresAt
+                });
+            }
+
+            return Results.Ok(new { codes = results });
+        }).RequireAdmin().MapToApiVersion(1, 0);
+
         // POST /redemptions/verify
         group.MapPost("/redemptions/verify", async (
             HttpContext httpContext,

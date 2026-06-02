@@ -4,8 +4,9 @@ import { CycleConfigSection } from './configuration/CycleConfigSection';
 import { ThresholdsConfigSection } from './configuration/ThresholdsConfigSection';
 import { GeneralConfigSection } from './configuration/GeneralConfigSection';
 import { SmsConfigSection } from './configuration/SmsConfigSection';
+import { BrandConfigSection } from './configuration/BrandConfigSection';
 
-type ConfigTab = 'cycle' | 'thresholds' | 'general' | 'sms';
+type ConfigTab = 'cycle' | 'thresholds' | 'general' | 'sms' | 'branding';
 
 export function ConfigurationPage() {
   const [activeTab, setActiveTab] = useState<ConfigTab>('cycle');
@@ -15,6 +16,7 @@ export function ConfigurationPage() {
     { id: 'thresholds', label: 'Purchase Thresholds' },
     { id: 'general', label: 'General Settings' },
     { id: 'sms', label: 'SMS Settings' },
+    { id: 'branding', label: 'Branding' },
   ];
 
   return (
@@ -52,6 +54,7 @@ export function ConfigurationPage() {
         {activeTab === 'thresholds' && <ThresholdsConfigSection />}
         {activeTab === 'general' && <GeneralConfigSection />}
         {activeTab === 'sms' && <SmsConfigSection />}
+        {activeTab === 'branding' && <BrandConfigSection />}
       </div>
     </div>
   );

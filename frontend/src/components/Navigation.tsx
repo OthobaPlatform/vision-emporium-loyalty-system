@@ -149,9 +149,14 @@ export function Navigation({ items, collapsed = false }: NavigationProps) {
               className={({ isActive }) =>
                 `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                   isActive
-                    ? 'bg-[#E31E24]/10 text-[#E31E24]'
+                    ? 'text-[var(--brand-primary,#E31E24)]'
                     : 'text-gray-700 hover:bg-gray-100 hover:text-gray-900'
                 } ${collapsed ? 'justify-center' : ''}`
+              }
+              style={({ isActive }) =>
+                isActive
+                  ? { backgroundColor: 'color-mix(in srgb, var(--brand-primary, #E31E24) 10%, transparent)' }
+                  : undefined
               }
               title={collapsed ? item.label : undefined}
             >

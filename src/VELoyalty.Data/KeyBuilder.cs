@@ -158,6 +158,14 @@ public static class KeyBuilder
     /// <summary>SMS Config SK: SETTINGS#SMS</summary>
     public static string SmsConfigSk() => "SETTINGS#SMS";
 
+    // ─── Brand Config ─────────────────────────────────────────────────────────
+
+    /// <summary>Brand Config PK: CONFIG</summary>
+    public static string BrandConfigPk() => "CONFIG";
+
+    /// <summary>Brand Config SK: SETTINGS#BRAND</summary>
+    public static string BrandConfigSk() => "SETTINGS#BRAND";
+
     // ─── Notification ───────────────────────────────────────────────────────────
 
     /// <summary>Notification PK: NOTIF#{customerId}</summary>

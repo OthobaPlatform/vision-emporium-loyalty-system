@@ -235,6 +235,44 @@ public class ConfigRepository : DynamoDbRepository
         await PutItemAsync(item, cancellationToken: cancellationToken);
     }
 
+    // ─── Brand Config ─────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Gets the brand/theming configuration.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>The brand config, or null if not configured.</returns>
+    public async Task<BrandConfig?> GetBrandConfigAsync(CancellationToken cancellationToken = default)
+    {
+        var item = await GetItemAsync(
+            KeyBuilder.BrandConfigPk(),
+            KeyBuilder.BrandConfigSk(),
+            cancellationToken: cancellationToken);
+
+        return item is null ? null : MapToBrandConfig(item);
+    }
+
+    /// <summary>
+    /// Creates or updates the brand/theming configuration.
+    /// </summary>
+    /// <param name="config">The brand config to store.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    public async Task PutBrandConfigAsync(BrandConfig config, CancellationToken cancellationToken = default)
+    {
+        var item = AttributeValueSerializer.NewItem(
+                KeyBuilder.BrandConfigPk(),
+                KeyBuilder.BrandConfigSk())
+            .WithString("CompanyName", config.CompanyName)
+            .WithString("PrimaryColor", config.PrimaryColor)
+            .WithString("SecondaryColor", config.SecondaryColor)
+            .WithString("AccentColor", config.AccentColor)
+            .WithString("LogoUrl", config.LogoUrl)
+            .WithString("FaviconUrl", config.FaviconUrl)
+            .Build();
+
+        await PutItemAsync(item, cancellationToken: cancellationToken);
+    }
+
     // ─── Mapping Helpers ────────────────────────────────────────────────────────
 
     private static LoyaltyCycle MapToLoyaltyCycle(Dictionary<string, AttributeValue> item) =>
@@ -272,5 +310,15 @@ public class ConfigRepository : DynamoDbRepository
             BaseUrl: AttributeValueSerializer.GetRequiredString(item, "BaseUrl"),
             ApiKey: AttributeValueSerializer.GetRequiredString(item, "ApiKey"),
             SenderId: AttributeValueSerializer.GetRequiredString(item, "SenderId")
+        );
+
+    private static BrandConfig MapToBrandConfig(Dictionary<string, AttributeValue> item) =>
+        new(
+            CompanyName: AttributeValueSerializer.GetString(item, "CompanyName") ?? "Vision Emporium",
+            PrimaryColor: AttributeValueSerializer.GetString(item, "PrimaryColor") ?? "#E31E24",
+            SecondaryColor: AttributeValueSerializer.GetString(item, "SecondaryColor") ?? "#1a1a1a",
+            AccentColor: AttributeValueSerializer.GetString(item, "AccentColor") ?? "#D6E4F0",
+            LogoUrl: AttributeValueSerializer.GetString(item, "LogoUrl") ?? "",
+            FaviconUrl: AttributeValueSerializer.GetString(item, "FaviconUrl") ?? ""
         );
 }

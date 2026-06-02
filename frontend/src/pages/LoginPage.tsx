@@ -60,12 +60,12 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#D6E4F0] px-4 py-12 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex items-center justify-center px-4 py-12 sm:px-6 lg:px-8" style={{ backgroundColor: 'var(--brand-accent, #D6E4F0)' }}>
       <Helmet>
         <title>Sign In | Vision Emporium Loyalty</title>
       </Helmet>
       {/* Red border accent (matching the brand image) */}
-      <div className="absolute inset-0 border-[6px] border-[#E31E24] pointer-events-none" />
+      <div className="absolute inset-0 border-[6px] pointer-events-none" style={{ borderColor: 'var(--brand-primary, #E31E24)' }} />
 
       <div className="w-full max-w-md space-y-8">
         {/* Logo */}
@@ -89,7 +89,7 @@ export function LoginPage() {
                 role="alert"
                 aria-live="assertive"
               >
-                <p className="text-sm text-[#E31E24]">{error}</p>
+                <p className="text-sm" style={{ color: 'var(--brand-primary, #E31E24)' }}>{error}</p>
               </div>
             )}
 
@@ -108,7 +108,8 @@ export function LoginPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="mt-1 block w-full rounded-lg border border-gray-300 px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:border-[#E31E24] focus:outline-none focus:ring-2 focus:ring-[#E31E24]/20 sm:text-sm transition-colors"
+                className="mt-1 block w-full rounded-lg border border-gray-300 px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 sm:text-sm transition-colors"
+                style={{ '--tw-ring-color': 'var(--brand-primary, #E31E24)', borderColor: undefined } as React.CSSProperties}
                 placeholder="you@example.com"
                 disabled={isLoading}
               />
@@ -129,7 +130,8 @@ export function LoginPage() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="mt-1 block w-full rounded-lg border border-gray-300 px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:border-[#E31E24] focus:outline-none focus:ring-2 focus:ring-[#E31E24]/20 sm:text-sm transition-colors"
+                className="mt-1 block w-full rounded-lg border border-gray-300 px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 sm:text-sm transition-colors"
+                style={{ '--tw-ring-color': 'var(--brand-primary, #E31E24)' } as React.CSSProperties}
                 placeholder="Enter your password"
                 disabled={isLoading}
               />
@@ -138,7 +140,8 @@ export function LoginPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="flex w-full justify-center rounded-lg bg-[#E31E24] px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#c91a1f] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#E31E24] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="flex w-full justify-center rounded-lg px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              style={{ backgroundColor: 'var(--brand-primary, #E31E24)' }}
             >
               {isLoading ? 'Signing in...' : 'Sign in'}
             </button>

@@ -37,7 +37,7 @@ export function Layout() {
         aria-label="Sidebar"
       >
         {/* Brand header with red accent */}
-        <div className="flex h-16 items-center gap-3 border-b border-gray-200 px-4 bg-gradient-to-r from-[#E31E24] to-[#c91a1f]">
+        <div className="flex h-16 items-center gap-3 border-b border-gray-200 px-4" style={{ background: 'linear-gradient(to right, var(--brand-primary, #E31E24), var(--brand-secondary, #1a1a1a))' }}>
           <VisionEmporiumIcon className="flex-shrink-0" />
           <div className="flex flex-col">
             <span className="text-sm font-bold text-white leading-tight">
@@ -57,7 +57,7 @@ export function Layout() {
         {/* User info at bottom */}
         <div className="border-t border-gray-200 p-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#E31E24]/10 text-xs font-bold text-[#E31E24]">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-bold" style={{ backgroundColor: 'color-mix(in srgb, var(--brand-primary, #E31E24) 10%, transparent)', color: 'var(--brand-primary, #E31E24)' }}>
               {user.sub.charAt(0).toUpperCase()}
             </div>
             <div className="flex-1 min-w-0">
@@ -101,7 +101,8 @@ export function Layout() {
             </span>
             <button
               onClick={logout}
-              className="rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:border-[#E31E24] hover:text-[#E31E24] transition-colors"
+              className="rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+              style={{ '--hover-border': 'var(--brand-primary, #E31E24)' } as React.CSSProperties}
             >
               Sign out
             </button>

@@ -10,6 +10,54 @@ public static class ConfigurationEndpoints
 {
     public static RouteGroupBuilder MapConfigurationEndpoints(this RouteGroupBuilder group)
     {
+        // GET /config/brand — PUBLIC endpoint (no auth required, needed before login for theming)
+        group.MapGet("/config/brand", async (
+            ConfigRepository configRepository,
+            CancellationToken cancellationToken) =>
+        {
+            var config = await configRepository.GetBrandConfigAsync(cancellationToken);
+            return Results.Ok(config ?? new BrandConfig(
+                CompanyName: "Vision Emporium",
+                PrimaryColor: "#E31E24",
+                SecondaryColor: "#1a1a1a",
+                AccentColor: "#D6E4F0",
+                LogoUrl: "",
+                FaviconUrl: ""
+            ));
+        }).MapToApiVersion(1, 0);
+
+        // PUT /config/brand — Admin only
+        group.MapPut("/config/brand", async (
+            UpdateBrandConfigRequest request,
+            ConfigRepository configRepository,
+            CancellationToken cancellationToken) =>
+        {
+            var errors = new List<string>();
+            if (string.IsNullOrWhiteSpace(request.CompanyName))
+                errors.Add("Company name is required.");
+            if (string.IsNullOrWhiteSpace(request.PrimaryColor))
+                errors.Add("Primary color is required.");
+            if (string.IsNullOrWhiteSpace(request.SecondaryColor))
+                errors.Add("Secondary color is required.");
+            if (string.IsNullOrWhiteSpace(request.AccentColor))
+                errors.Add("Accent color is required.");
+
+            if (errors.Count > 0)
+                return Results.BadRequest(new { error = "ValidationError", details = errors });
+
+            var config = new BrandConfig(
+                CompanyName: request.CompanyName!.Trim(),
+                PrimaryColor: request.PrimaryColor!.Trim(),
+                SecondaryColor: request.SecondaryColor!.Trim(),
+                AccentColor: request.AccentColor!.Trim(),
+                LogoUrl: request.LogoUrl?.Trim() ?? "",
+                FaviconUrl: request.FaviconUrl?.Trim() ?? ""
+            );
+
+            await configRepository.PutBrandConfigAsync(config, cancellationToken);
+            return Results.Ok(config);
+        }).RequireAdmin().MapToApiVersion(1, 0);
+
         // GET /config/cycle — always returns the auto-computed cycle (June 1 → May 31)
         group.MapGet("/config/cycle", (CancellationToken cancellationToken) =>
         {
@@ -230,4 +278,16 @@ public record NotificationResponse(
     string? FailureReason,
     int AttemptCount,
     DateTime SentAt
+);
+
+/// <summary>
+/// Request to update brand/theming configuration.
+/// </summary>
+public record UpdateBrandConfigRequest(
+    string? CompanyName,
+    string? PrimaryColor,
+    string? SecondaryColor,
+    string? AccentColor,
+    string? LogoUrl,
+    string? FaviconUrl
 );

@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
 import { AuthProvider } from './contexts/AuthContext';
+import { BrandProvider } from './contexts/BrandContext';
 import { ToastProvider } from './components/Toast';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Layout } from './components/Layout';
@@ -19,9 +20,10 @@ import { VerificationCodesPage } from './pages/VerificationCodesPage';
 function App() {
   return (
     <HelmetProvider>
-      <BrowserRouter>
-        <AuthProvider>
-          <ToastProvider>
+      <BrandProvider>
+        <BrowserRouter>
+          <AuthProvider>
+            <ToastProvider>
             <Routes>
               {/* Public routes */}
               <Route path="/login" element={<LoginPage />} />
@@ -137,6 +139,7 @@ function App() {
           </ToastProvider>
         </AuthProvider>
       </BrowserRouter>
+    </BrandProvider>
     </HelmetProvider>
   );
 }

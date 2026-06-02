@@ -302,3 +302,21 @@ public record AuthToken(
     string Token,
     DateTime ExpiresAt
 );
+
+/// <summary>
+/// Represents brand/theming configuration stored in DynamoDB.
+/// </summary>
+/// <param name="CompanyName">Company display name.</param>
+/// <param name="PrimaryColor">Primary brand color (hex, e.g., "#E31E24").</param>
+/// <param name="SecondaryColor">Secondary brand color (hex, e.g., "#1a1a1a").</param>
+/// <param name="AccentColor">Accent/background color (hex, e.g., "#D6E4F0").</param>
+/// <param name="LogoUrl">URL to the logo image (can be a data: URI or external URL).</param>
+/// <param name="FaviconUrl">URL to the favicon.</param>
+public record BrandConfig(
+    string CompanyName,
+    string PrimaryColor,
+    string SecondaryColor,
+    string AccentColor,
+    string LogoUrl,
+    string FaviconUrl
+);

@@ -91,6 +91,8 @@ public static class WebApplicationBuilderExtensions
 [System.Text.Json.Serialization.JsonSerializable(typeof(Dictionary<string, string>))]
 [System.Text.Json.Serialization.JsonSerializable(typeof(SmsConfigResponse))]
 [System.Text.Json.Serialization.JsonSerializable(typeof(UpdateSmsConfigRequest))]
+[System.Text.Json.Serialization.JsonSerializable(typeof(VELoyalty.Core.BrandConfig))]
+[System.Text.Json.Serialization.JsonSerializable(typeof(UpdateBrandConfigRequest))]
 [System.Text.Json.Serialization.JsonSerializable(typeof(NotificationResponse))]
 [System.Text.Json.Serialization.JsonSerializable(typeof(List<VELoyalty.Core.NotificationLog>))]
 internal partial class AppJsonSerializerContext : System.Text.Json.Serialization.JsonSerializerContext
